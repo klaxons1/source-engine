@@ -284,25 +284,38 @@ index bda894fae3c0864053a026baf48a9a04661c19cd..47424a24be3465e9305d59f525d0e1c4
      D3DLOCKED_BOX lockedBox;
      HRESULT hr = LockImage(cursorTex, 0, 0, &lockedBox, nullptr, D3DLOCK_READONLY);
 diff --git a/src/d3d9/d3d9_main.cpp b/src/d3d9/d3d9_main.cpp
-index e182b5fa3f65da8ec662c5f6a2a8752c00f5f541..15e0a392e6554762371063c49311a9b997d51c0b 100644
+index e182b5fa3f65da8ec662c5f6a2a8752c00f5f541..8585af11af576464e34175eee9de94e6673f2957 100644
 --- a/src/d3d9/d3d9_main.cpp
 +++ b/src/d3d9/d3d9_main.cpp
-@@ -1,4 +1,5 @@
+@@ -1,4 +1,7 @@
  #include "../dxvk/dxvk_instance.h"
 +#include <limits>
++#include <exception>
++#include <android/log.h>
  
  #include "d3d9_interface.h"
  #include "d3d9_shader_validator.h"
-@@ -26,6 +27,35 @@ namespace dxvk {
+@@ -26,6 +29,46 @@ namespace dxvk {
  
  extern "C" {
  
 +  // Unique entry point: the legacy companion libtogl also exports Direct3DCreate9.
 +  // Never let dynamic interposition give the native shaderapi a TOGL COM object.
 +  DLLEXPORT IDirect3D9* DXVKSarekDirect3DCreate9(UINT) {
-+    IDirect3D9Ex* result = nullptr;
-+    dxvk::CreateD3D9(false, &result);
-+    return result;
++    // The caller uses Source's legacy GNUSTL ABI. Never unwind a libc++ DXVK
++    // exception across this C boundary (e.g. missing Vulkan/custom-driver failure).
++    try {
++      IDirect3D9Ex* result = nullptr;
++      dxvk::CreateD3D9(false, &result);
++      return result;
++    } catch (const dxvk::DxvkError& e) {
++      __android_log_print(ANDROID_LOG_ERROR, "UnderhellVulkan", "Sarek initialization failed: %s", e.message().c_str());
++    } catch (const std::exception& e) {
++      __android_log_print(ANDROID_LOG_ERROR, "UnderhellVulkan", "Sarek initialization failed: %s", e.what());
++    } catch (...) {
++      __android_log_print(ANDROID_LOG_ERROR, "UnderhellVulkan", "Sarek initialization failed: unknown native exception");
++    }
++    return nullptr;
 +  }
 +
 +  // The pointer MUST come from this library's matching factory above.

@@ -29,7 +29,8 @@ VPK and the companion base extras VPK. SDL passes arguments as an array, preserv
 quoted arguments rather than using the companion's fixed-buffer strtok path.
 The native shaderapi uses the unique `DXVKSarekDirect3DCreate9` export: the
 companion TOGL also exports `Direct3DCreate9`, so an unqualified symbol would risk
-returning an incompatible TOGL object. Video-memory reporting queries the selected
+returning an incompatible TOGL object. The unique factory catches initialization
+exceptions inside libc++ and returns NULL; it never unwinds into GNUSTL callers. Video-memory reporting queries the selected
 adapter's device-local Vulkan heap budget/size, not Windows WMI or invented RAM.
 ASTC is GLES-only; the stored checkbox setting survives a renderer change.
 
