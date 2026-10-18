@@ -89,6 +89,8 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('getBoolean("underhell_astc", false)', java)
         self.assertIn('editor.putBoolean("underhell_astc", underhellAstc.isChecked())', java)
         self.assertEqual(java.count("new android.widget.CheckBox(this)"), 1)
+        for notice in (ROOT / "assets/android/licenses").glob("*.txt"):
+            self.assertEqual((self.android / "assets/licenses" / notice.name).read_bytes(), notice.read_bytes())
         self.assertIn('putExtra( "argv", argv )', java)
         label = ET.parse(self.android / "res/values/updates.xml").find("string[@name='mod_name']")
         self.assertEqual(label.text, "underhell")
@@ -231,7 +233,8 @@ class ApkIdentityTests(unittest.TestCase):
                 apk_check.verify(self.apk, bad)
 
     def test_rejects_missing_server_or_wrong_case(self):
-        for names in ({"lib/arm64-v8a/libclient.so": self.libraries["lib/arm64-v8a/libclient.so"]},
+        for names in ({k:v for k,v in self.libraries.items() if "shaderapidx9" not in k},
+                      {"lib/arm64-v8a/libclient.so": self.libraries["lib/arm64-v8a/libclient.so"]},
                       {key.replace("libserver.so", "libServer.so"): value for key, value in self.libraries.items()}):
             self.pack(names)
             with self.assertRaises(ValueError):

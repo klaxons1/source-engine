@@ -64,6 +64,10 @@ def prepare(launcher):
     helper = "java/me/nillerusr/UnderhellLaunchContract.java"
     changes[android / "src/me/nillerusr/UnderhellLaunchContract.java"] = (ASSETS / helper).read_text(encoding="utf-8")
 
+    # Binary distributions retain the third-party notices as readable APK assets.
+    for notice in (ASSETS / "licenses").glob("*.txt"):
+        changes[android / "assets/licenses" / notice.name] = notice.read_text(encoding="utf-8")
+
     path = android / "AndroidManifest.xml"
     text = path.read_text(encoding="utf-8")
     manifest = ET.fromstring(text)

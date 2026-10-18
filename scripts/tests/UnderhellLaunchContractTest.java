@@ -27,6 +27,11 @@ public class UnderhellLaunchContractTest {
             bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError();
             Files.write(c.toPath(),elf(UnderhellLaunchContract.CLIENT_MARKER,183));
             Files.write(s.toPath(),elf(UnderhellLaunchContract.SERVER_MARKER,183));
+            bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError("missing renderer accepted");
+            Files.write(r.toPath(),elf("stock renderer",183));
+            bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError("stock renderer accepted");
+            Files.write(r.toPath(),elf(UnderhellLaunchContract.RENDERER_MARKER,40));
+            bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError("wrong renderer ABI accepted");
             Files.write(r.toPath(),elf(UnderhellLaunchContract.RENDERER_MARKER,183));
             UnderhellLaunchContract.requireLibraries(root.toString());
             Files.write(s.toPath(),elf("stock module",183));

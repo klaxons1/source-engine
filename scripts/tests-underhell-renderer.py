@@ -103,7 +103,39 @@ void TestUploads(bool enabled) {
  bc[0]=0;bc[1]=0;bc[2]=255;bc[3]=255;bc[4]=0xff;
  CompressedTexImage2D(0,1,0x83F1,2,2,0,8,bc);assert(uploadGL.format==first);
  CompressedTexImage2D(0,0,0x83F2,5,7,0,64,bc);assert(uploadGL.format==first);
+ // Dynamic / autogen callers opt out, even when the checkbox is on.
+ CompressedTexImage2D(0,0,0x83F2,4,4,0,16,bc,false);assert(uploadGL.format==GL_RGBA8);
  bool failed=false;try{CompressedTexImage2D(0,0,0x83F2,2,2,0,15,bc);}catch(...){failed=true;}assert(failed);
+}
+'''
+
+
+DYNAMIC_STUB = r'''
+const unsigned GL_PIXEL_UNPACK_BUFFER=0x88EC, kGLMTexDynamic=0x80;
+struct GLMTexLayoutSlice {int m_storageSize=16,m_storageOffset=8;};
+struct DynFormat {int m_chunkSize=4;};
+struct DynLayout {struct {unsigned m_texFlags=kGLMTexDynamic;} m_key;
+ DynFormat format;DynFormat *m_format=&format;GLMTexLayoutSlice m_slices[2];};
+struct DynDesc {int m_sliceIndex=1;};
+struct DynGL {int bound=7;unsigned char *mapped=nullptr;bool unmapped=false;
+ void glUnmapBuffer(unsigned){assert(bound==7);unmapped=true;memset(mapped,0xdd,24);}
+ void glBindBuffer(unsigned,unsigned value){bound=value;}
+} dynGL;
+#define gGL (&dynGL)
+struct DynTex {
+ DynLayout layout;DynLayout *m_layout=&layout;void *m_mapped=nullptr;bool wrote=false;
+ unsigned char expected[16];
+ void WriteTexels(DynDesc *,bool){assert(dynGL.unmapped && dynGL.bound==0);
+  assert(!memcmp(m_mapped,expected,16));wrote=true;}
+ void UnlockFixture(){DynDesc d;DynDesc *desc=&d;bool fullyDirty=true;
+'''
+DYNAMIC_TEST = r'''
+ }};
+#undef gGL
+void TestDynamic(){
+ unsigned char source[24];for(unsigned i=0;i<24;++i)source[i]=i;
+ DynTex tex;memcpy(tex.expected,source+8,16);tex.m_mapped=source;dynGL.mapped=source;
+ tex.UnlockFixture();assert(tex.wrote && !tex.m_mapped && dynGL.bound==0);
 }
 '''
 
@@ -180,6 +212,9 @@ def run():
         helpers = tex[tex.index('GLboolean isDXTc('):tex.index('// Check the actual format,')]
         policy = tex[tex.index('struct UHCompressedFormats'):tex.index('// TexSubImage should work')]
         (tmp/'upload_test.inc').write_text(UPLOAD_STUB+helpers+policy+UPLOAD_TEST)
+        a=tex.index('if( m_layout->m_key.m_texFlags & kGLMTexDynamic && m_mapped )')
+        b=tex.index('\n\t\t\t\telse\n',a)
+        (tmp/'dynamic_test.inc').write_text(DYNAMIC_STUB+tex[a:b]+DYNAMIC_TEST)
         flags = ['-O1','-g','-fsanitize=address,undefined','-fno-omit-frame-pointer']
         subprocess.run(['gcc','-std=c99',*flags,'-c',str(ROOT/'togles/linuxwin/decompress.c'),'-o',str(tmp/'dec.o')],check=True)
         vendor = ROOT/'togles/thirdparty/astcenc'

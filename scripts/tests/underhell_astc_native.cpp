@@ -13,6 +13,7 @@ enum { GL_ALREADY_SIGNALED=0x911A, GL_TIMEOUT_EXPIRED=0x911B,
 #include "uh_glsync.h"
 #include "query_test.inc"
 #include "upload_test.inc"
+#include "dynamic_test.inc"
 void TestSync() {
     assert(UHGLFenceSignaled(GL_ALREADY_SIGNALED));
     assert(UHGLFenceSignaled(GL_CONDITION_SATISFIED));
@@ -42,7 +43,7 @@ void TestSync() {
 }
 int main(int argc, char **argv) {
     assert(argc == 4);
-    TestSync(); TestQueries(); TestUploads(strcmp(argv[3], "off") != 0);
+    TestSync(); TestQueries(); TestDynamic(); TestUploads(strcmp(argv[3], "off") != 0);
     assert(!UHASTCSize(0, 4) && !UHASTCSize(UINT_MAX, UINT_MAX));
     assert(!UHBCSize(UH_BC3, UINT_MAX, 4));
     assert(UHASTCSize(1, 1) == 16 && UHASTCSize(5, 7) == 64);

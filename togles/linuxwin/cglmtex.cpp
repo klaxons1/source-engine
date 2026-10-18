@@ -3445,7 +3445,7 @@ static UHBCFormat UHGetBCFormat(GLenum format) {
     }
 }
 void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
-    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data)
+    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data, bool allowASTC = true)
 {
     if (width <= 0 || height <= 0) return;
     if (!isDXTc(internalformat)) Error("Underhell: unexpected compressed format %x", internalformat);
@@ -3461,7 +3461,7 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
     }
 #ifdef UNDERHELL_ASTC
     const GLenum astcFormat = srgb ? 0x93D0 : 0x93B0; // ASTC 4x4, sRGB / linear
-    if (caps.astcEnabled && caps.Has(astcFormat)) {
+    if (allowASTC && caps.astcEnabled && caps.Has(astcFormat)) {
         size_t bytes = UHASTCSize(width, height);
         if (!bytes || bytes > INT_MAX) Error("Underhell: ASTC mip size overflow");
         void *blocks = data ? malloc(bytes) : NULL;
@@ -3654,7 +3654,8 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				Assert( writeWholeSlice );	//subimage not implemented in this path yet
 				// compressed path
 				// http://www.opengl.org/sdk/docs/man/xhtml/glCompressedTexImage2D.xml
-				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress,
+                    !(m_layout->m_key.m_texFlags & (kGLMTexDynamic | kGLMTexMippedAuto | kGLMTexRenderable)) );
 			}
 			else
 			{
@@ -4029,13 +4030,26 @@ void CGLMTex::Unlock( GLMTexLockParams *params )
 				// fullyDirty |= (m_sliceFlags[ desc->m_sliceIndex ] & kSliceStorageValid);
 				
 				if( m_layout->m_key.m_texFlags & kGLMTexDynamic && m_mapped )
-				{
-					gGL->glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
-
-					WriteTexels( desc, fullyDirty );
-					m_mapped = NULL;
-					gGL->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
-				}
+                {
+                    // DXT software upload must read CPU bytes, not an unmapped
+                    // address or a byte offset into a still-bound unpack PBO.
+                    char *copy = NULL;
+                    if (m_layout->m_format->m_chunkSize != 1) {
+                        GLMTexLayoutSlice *dynamicSlice = &m_layout->m_slices[desc->m_sliceIndex];
+                        copy = (char *)malloc(dynamicSlice->m_storageSize);
+                        if (!copy) Error("Underhell: dynamic DXT upload allocation failed");
+                        memcpy(copy, (char *)m_mapped + dynamicSlice->m_storageOffset, dynamicSlice->m_storageSize);
+                    }
+                    gGL->glUnmapBuffer(GL_PIXEL_UNPACK_BUFFER);
+                    if (copy) {
+                        gGL->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                        m_mapped = copy; // transient CPU source for WriteTexels
+                    }
+                    WriteTexels(desc, fullyDirty);
+                    m_mapped = NULL;
+                    free(copy);
+                    gGL->glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+                }
 				else
 					WriteTexels( desc, fullyDirty  );
 
