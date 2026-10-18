@@ -88,6 +88,59 @@ public final class UnderhellLaunchContract {
         return result.toArray(new String[result.size()]);
     }
 
+    // Own runner defaults: use the actual Surface aspect ratio, not Source's
+    // fresh 640x480 config or the companion app's private preferences.
+    public static int[] nativeRenderSize(String input, int surfaceWidth, int surfaceHeight, int targetHeight) {
+        if (surfaceWidth < 64 || surfaceHeight < 64 || surfaceWidth > 16384 || surfaceHeight > 16384)
+            throw new IllegalArgumentException("Invalid Android Surface size");
+        if (targetHeight != 0 && targetHeight != 720 && targetHeight != 1080)
+            throw new IllegalArgumentException("Invalid render-height preference");
+        List<Token> args = tokens(buildArguments(input, false));
+        int width = dimension(args, "-w", "-width");
+        int height = dimension(args, "-h", "-height");
+        if (width == 0 && height == 0) {
+            height = targetHeight == 0 ? surfaceHeight : Math.min(targetHeight, surfaceHeight);
+            width = Math.max(64, (int)Math.round((double)surfaceWidth * height / surfaceHeight));
+        } else if (width == 0) {
+            width = Math.max(64, (int)Math.round((double)surfaceWidth * height / surfaceHeight));
+        } else if (height == 0) {
+            height = Math.max(64, (int)Math.round((double)surfaceHeight * width / surfaceWidth));
+        }
+        if (width > 16384 || height > 16384) throw new IllegalArgumentException("Render size is too large");
+        return new int[] {width, height};
+    }
+
+    private static int dimension(List<Token> args, String shortName, String longName) {
+        int result = 0;
+        for (int i = 0; i < args.size(); ++i) {
+            String name = args.get(i).value.toLowerCase(Locale.ROOT);
+            if (!name.equals(shortName) && !name.equals(longName)) continue;
+            if (i + 1 >= args.size()) throw new IllegalArgumentException("Missing value for " + name);
+            int value;
+            try { value = Integer.parseInt(args.get(i + 1).value); }
+            catch (NumberFormatException e) { throw new IllegalArgumentException("Invalid value for " + name, e); }
+            if (value < 64 || value > 16384) throw new IllegalArgumentException("Invalid value for " + name);
+            if (result == 0) result = value; // Source uses the first matching option
+            ++i;
+        }
+        return result;
+    }
+
+    public static String[] buildNativeArgumentArray(String input, int surfaceWidth, int surfaceHeight, int targetHeight) {
+        int[] size = nativeRenderSize(input, surfaceWidth, surfaceHeight, targetHeight);
+        // Replace only dimension switches in this owned argv. Preserve quotes,
+        // all other options and the GLES path. Avoid first-vs-last duplicate rules.
+        List<Token> args = tokens(buildArguments(input, false));
+        StringBuilder normalized = new StringBuilder();
+        for (int i = 0; i < args.size(); ++i) {
+            String name = args.get(i).value.toLowerCase(Locale.ROOT);
+            if (name.equals("-w") || name.equals("-width") || name.equals("-h") || name.equals("-height")) { ++i; continue; }
+            normalized.append(' ').append(args.get(i).raw);
+        }
+        normalized.append(" -w ").append(size[0]).append(" -h ").append(size[1]);
+        return buildArgumentArray(normalized.toString());
+    }
+
     public static void requireLibraries(String directory) throws IOException {
         if (directory == null || directory.length() == 0)
             throw new IOException("Android did not provide a native library directory");

@@ -98,6 +98,17 @@ class LauncherTests(unittest.TestCase):
         for notice in (ROOT / "assets/android/licenses").glob("*.txt"):
             self.assertEqual((self.android / "assets/licenses" / notice.name).read_bytes(), notice.read_bytes())
         self.assertIn('putExtra( "argv", argv )', java)
+        self.assertIn('putExtra("render_height", mPref.getInt("underhell_render_height", 720))', java)
+        staged_sdl = (self.android / "src/org/libsdl/app/SDLActivity.java").read_text()
+        pristine_sdl = (ROOT / "thirdparty/SDL-src/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java").read_text()
+        for axis, dimension in (("X", "Width"), ("Y", "Height")):
+            old = "event.get" + axis + "(i) / m" + dimension
+            new = "event.get" + axis + "(i) / Math.max(1, v.get" + dimension + "())"
+            self.assertEqual(pristine_sdl.count(old), 3)
+            self.assertNotIn(old, staged_sdl)
+            self.assertEqual(staged_sdl.count(new), 3)
+        for font in (ROOT / "assets/android/fonts").iterdir():
+            self.assertEqual((self.android / "assets/fonts" / font.name).read_bytes(), font.read_bytes())
         label = ET.parse(self.android / "res/values/updates.xml").find("string[@name='mod_name']")
         self.assertEqual(label.text, "underhell")
         self.assertEqual(self.native.read_bytes(), elf_fixture(apk_check.MARKERS["client"]))
@@ -126,7 +137,7 @@ class LauncherTests(unittest.TestCase):
         launcher = root / "srceng-mod-launcher"
         launcher.mkdir()
         shutil.copytree(self.android, launcher / "android")
-        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
+        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py", "test-underhell-fonts.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
             shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
         shutil.copytree(ROOT / "assets", root / "assets")
         sdl_java = Path("thirdparty/SDL-src/android-project/app/src/main/java")
@@ -254,6 +265,9 @@ class ApkIdentityTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 apk_check.verify(self.apk, self.badging)
 
+    def test_bundled_fonts_have_real_latin_and_cyrillic_glyphs(self):
+        subprocess.run([sys.executable, str(ROOT / "scripts/test-underhell-fonts.py")], check=True)
+
     def test_vulkan_apk_requires_complete_runtime_provenance_hashes_and_java(self):
         libraries = dict(self.libraries)
         runtime = {"sarek": "0c0e8f6f62c7cb37dbf5d38413517efa00c08fef",
@@ -265,10 +279,12 @@ class ApkIdentityTests(unittest.TestCase):
         libraries["lib/arm64-v8a/libshaderapidx9_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_SHADERAPI_V1")
         libraries["lib/arm64-v8a/liblauncher_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_LAUNCHER_V1")
         libraries["assets/underhell-vulkan.json"] = json.dumps(runtime).encode()
+        for font in (ROOT / "assets/android/fonts").iterdir():
+            if font.is_file(): libraries["assets/fonts/" + font.name] = font.read_bytes()
         libraries["classes.dex"] = b"Lme/nillerusr/UnderhellSarekActivity;Lme/nillerusr/UnderhellVulkanSettingsActivity;Lorg/libsdl/app/SDLActivity;"
         self.pack(libraries)
         self.assertIn("vulkan", apk_check.verify(self.apk, self.badging))
-        for missing in ("assets/underhell-vulkan.json", "lib/arm64-v8a/libmain_hook.so", "classes.dex"):
+        for missing in ("assets/underhell-vulkan.json", "lib/arm64-v8a/libmain_hook.so", "classes.dex", "assets/fonts/dejavusans.ttf", "assets/fonts/LICENSE_DEJAVU.txt"):
             self.pack({k: v for k, v in libraries.items() if k != missing})
             with self.assertRaises(ValueError):
                 apk_check.verify(self.apk, self.badging)
@@ -277,6 +293,12 @@ class ApkIdentityTests(unittest.TestCase):
         self.pack(broken)
         with self.assertRaisesRegex(ValueError, "Stale/replaced"):
             apk_check.verify(self.apk, self.badging)
+        for name in ("dejavusans.ttf", "LiberationMono-Regular.ttf", "LICENSE_DEJAVU.txt"):
+            broken = dict(libraries)
+            broken["assets/fonts/" + name] = b"corrupted font or license"
+            self.pack(broken)
+            with self.assertRaisesRegex(ValueError, "bundled font"):
+                apk_check.verify(self.apk, self.badging)
         broken = dict(libraries)
         runtime["sarek"] = "ordinary dxvk-native"
         broken["assets/underhell-vulkan.json"] = json.dumps(runtime).encode()

@@ -37,6 +37,20 @@ public final class UnderhellVulkanSettingsActivity extends Activity {
         renderers.check(prefs.getString("underhell_renderer", "gles").equals("sarek") ? 2 : 1);
         renderers.setOnCheckedChangeListener((group, id) -> prefs.edit().putString("underhell_renderer", id == 2 ? "sarek" : "gles").apply());
         body.addView(renderers);
+        text("Разрешение Sarek: высота рендера, ширина по пропорциям Surface. Настройки Source Engine сюда не переносятся. Явные -w/-h в аргументах имеют приоритет.");
+        Spinner resolution = new Spinner(this);
+        final int[] heights = {720, 1080, 0};
+        resolution.setAdapter(new ArrayAdapter<String>(this, android.R.layout.simple_spinner_dropdown_item,
+            new String[] {"720p — по пропорциям экрана (по умолчанию)", "1080p — по пропорциям экрана", "Размер Surface — максимальная нагрузка"}));
+        int savedHeight = prefs.getInt("underhell_render_height", 720);
+        resolution.setSelection(savedHeight == 0 ? 2 : savedHeight == 1080 ? 1 : 0);
+        resolution.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            public void onItemSelected(android.widget.AdapterView<?> parent, android.view.View view, int position, long id) {
+                prefs.edit().putInt("underhell_render_height", heights[position]).apply();
+            }
+            public void onNothingSelected(android.widget.AdapterView<?> parent) {}
+        });
+        body.addView(resolution);
         text("Путь к ресурсам для встроенного Vulkan-запуска (корень с hl2/ и underhell/gameinfo.txt; регистр важен):");
         EditText path = new EditText(this); path.setSingleLine(true);
         path.setText(prefs.getString("underhell_gamepath", "/storage/emulated/0/srceng")); body.addView(path);

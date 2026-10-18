@@ -13,6 +13,7 @@ import java.util.*;
 public final class UnderhellSarekActivity extends SDLActivity {
     private static native void configureNative(String[] keys, String[] values, int width, int height, int refreshMilliHz);
     private static native void nativeSetResumed(boolean resumed);
+    private static native int[] nativeGetSurfaceSize();
     @Override protected void pauseNativeThread() {
         // Follow SDL's actual lifecycle: multi-window Android uses onStop/onStart,
         // not onPause/onResume. Close the WSI gate before SDL's pause handshake.
@@ -28,7 +29,13 @@ public final class UnderhellSarekActivity extends SDLActivity {
     @Override protected String[] getLibraries() { return new String[] { "SDL2", "launcher_sarek" }; }
     @Override protected String getMainFunction() { return "LauncherMainAndroid"; }
     @Override protected String[] getArguments() {
-        return UnderhellLaunchContract.buildArgumentArray(getIntent().getStringExtra("argv"));
+        int[] surface = nativeGetSurfaceSize();
+        int height = getIntent().getIntExtra("render_height", 720);
+        String[] result = UnderhellLaunchContract.buildNativeArgumentArray(
+            getIntent().getStringExtra("argv"), surface[0], surface[1], height);
+        android.util.Log.i("UnderhellVulkan", "Surface=" + surface[0] + "x" + surface[1]
+            + "; target height=" + height + "; argv=" + Arrays.toString(result));
+        return result;
     }
     @Override public void loadLibraries() {
         try {
@@ -47,6 +54,11 @@ public final class UnderhellSarekActivity extends SDLActivity {
             File ownVpk = copyAsset(this, "extras_dir.vpk", "underhell-extras.vpk");
             Context companion = createPackageContext("com.valvesoftware.source", 0);
             File baseVpk = copyAsset(companion, "extras_dir.vpk", "engine-extras.vpk");
+            // Font lookup in the companion core is APP_DATA_PATH/files/<name>.
+            // The VPK has touch/shader assets, not these physical font files.
+            for (String font : new String[] { "dejavusans.ttf", "dejavusans-bold.ttf",
+                    "dejavusans-oblique.ttf", "dejavusans-boldoblique.ttf", "LiberationMono-Regular.ttf" })
+                copyAsset(this, "fonts/" + font, font);
             // SONAME preloading lets the companion core use OUR lifecycle-safe SDL.
             System.load(own + "/libhidapi.so");
             System.load(own + "/libSDL2.so");
@@ -55,7 +67,7 @@ public final class UnderhellSarekActivity extends SDLActivity {
             System.load(own + "/libdxvk_sarek_d3d9.so");
             System.load(own + "/liblauncher_sarek.so");
             LinkedHashMap<String, String> env = new LinkedHashMap<String, String>();
-            env.put("APP_DATA_PATH", getFilesDir().getAbsolutePath());
+            env.put("APP_DATA_PATH", getApplicationInfo().dataDir);
             env.put("APP_LIB_PATH", core); env.put("APP_MOD_LIB", own);
             env.put("VALVE_GAME_PATH", new File(path).getCanonicalPath());
             env.put("EXTRAS_VPK_PATH", ownVpk.getAbsolutePath() + "," + baseVpk.getAbsolutePath());
@@ -75,7 +87,7 @@ public final class UnderhellSarekActivity extends SDLActivity {
     private File copyAsset(Context source, String asset, String destination) throws IOException {
         File file = new File(getFilesDir(), destination);
         File stage = new File(getFilesDir(), destination + ".tmp");
-        // Always refresh on a full GPU-process launch; never keep stale touch icons/base fonts after an update.
+        // Always refresh assets on a full GPU-process launch, including bundled fonts.
         try (InputStream in = source.getAssets().open(asset); FileOutputStream out = new FileOutputStream(stage)) {
             byte[] buffer = new byte[32768]; int n;
             while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);

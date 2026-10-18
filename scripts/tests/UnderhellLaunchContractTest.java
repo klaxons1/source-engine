@@ -21,6 +21,26 @@ public class UnderhellLaunchContractTest {
         eq(UnderhellLaunchContract.buildArguments("-console",true),base+" -console -uh_astc");
         eq(UnderhellLaunchContract.buildArguments("-uh_astc -UH_ASTC=1 -console",false),base+" -console");
         eq(UnderhellLaunchContract.buildArguments("-uh_astc -uh_astc=0",true),base+" -uh_astc");
+        int[] size = UnderhellLaunchContract.nativeRenderSize(null,2309,1080,720);
+        if(size[0]!=1539 || size[1]!=720)throw new AssertionError("wrong aspect/default");
+        size=UnderhellLaunchContract.nativeRenderSize(null,2309,1080,0);
+        if(size[0]!=2309 || size[1]!=1080)throw new AssertionError("native size lost");
+        size=UnderhellLaunchContract.nativeRenderSize("-w 1280",1920,1080,720);
+        if(size[0]!=1280 || size[1]!=720)throw new AssertionError("single-width aspect");
+        size=UnderhellLaunchContract.nativeRenderSize("-height 480",1920,1080,720);
+        if(size[0]!=853 || size[1]!=480)throw new AssertionError("single-height aspect");
+        size=UnderhellLaunchContract.nativeRenderSize("-width 800 -height 600",2309,1080,0);
+        if(size[0]!=800 || size[1]!=600)throw new AssertionError("explicit dimensions changed");
+        size=UnderhellLaunchContract.nativeRenderSize(null,1280,600,1080);
+        if(size[0]!=1280 || size[1]!=600)throw new AssertionError("unexpected upscaling");
+        String nativeArgs=String.join(" ",UnderhellLaunchContract.buildNativeArgumentArray("+echo \"keep quoted value\" -w 1280",1920,1080,720));
+        if(!nativeArgs.contains("keep quoted value") || !nativeArgs.contains("-w 1280 -h 720"))throw new AssertionError(nativeArgs);
+        for(String invalid:new String[]{"-w", "-w 0", "-h -1", "-width 999999999999", "-height nope", "-w 800 -w -console", "-h 720 -height"}) {
+            bad=false;try{UnderhellLaunchContract.nativeRenderSize(invalid,2309,1080,720);}catch(IllegalArgumentException e){bad=true;}
+            if(!bad)throw new AssertionError("invalid dimension accepted: "+invalid);
+        }
+        // The companion/GLES launch path remains independent of native defaults.
+        if(String.join(" ",UnderhellLaunchContract.buildArgumentArray("-console")).contains("-w "))throw new AssertionError();
         File root=Files.createTempDirectory("underhell-java").toFile();
         File c=new File(root,"libclient.so"),s=new File(root,"libserver.so"),r=new File(root,"libshaderapidx9.so");
         try {

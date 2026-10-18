@@ -40,6 +40,17 @@ def verify(apk, badging, staging=None):
             runtime = json.loads(archive.read(native_manifest))
             if runtime.get("sarek") != "0c0e8f6f62c7cb37dbf5d38413517efa00c08fef" or runtime.get("adrenotools") != "8fae8ce254dfc1344527e05301e43f37dea2df80":
                 raise ValueError("Unexpected Sarek/libadrenotools provenance")
+            font_root = Path(__file__).resolve().parents[1] / "assets/android/fonts"
+            font_manifest = json.loads((font_root / "manifest.json").read_text())
+            if "assets/fonts/manifest.json" not in members or json.loads(archive.read("assets/fonts/manifest.json")) != font_manifest:
+                raise ValueError("Missing/stale bundled font manifest")
+            for name, item in font_manifest["files"].items():
+                entry = "assets/fonts/" + name
+                if entry not in members or hashlib.sha256(archive.read(entry)).hexdigest() != item["sha256"]:
+                    raise ValueError("Missing/stale bundled font: " + name)
+                if staging is not None and (not (staging / entry).is_file() or (staging / entry).read_bytes() != archive.read(entry)):
+                    raise ValueError("Bundled font differs from staging: " + name)
+            report["fonts"] = "Pinned DejaVu Sans regular/bold/italic and mono bundled"
             hashes = runtime.get("libraries_sha256", {})
             required_runtime = {"lib" + n + ".so" for n in ("SDL2", "hidapi", "dxvk_sarek_d3d9", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook")}
             if set(hashes) != required_runtime:

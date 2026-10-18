@@ -225,3 +225,51 @@ This color fix is not a claim to fix the other device reports: the posted log
 still requests a 640x480 D3D backbuffer and presents to a 2309x1080 Android
 surface, and repeatedly recreates the swapchain. Font availability, render-mode
 selection, input scaling and the recreation trigger require separate validation.
+
+
+### Owned-runner fonts, resolution, touch and present stability
+
+The user confirmed the preceding color APK fixes colors on the Adreno 640.
+This next revision leaves those mappings, GLES/ASTC and the 15 controls intact:
+
+* `assets/android/fonts/` contains unmodified, SHA256-pinned DejaVu Sans regular,
+  bold, oblique, bold-oblique and Sans Mono from matplotlib commit
+  `4aeb773422464799998d900198b35cb80e94b3e1`, with the complete redistribution
+  license. The Mono file uses the legacy `LiberationMono-Regular.ttf` filename
+  expected by the companion's Courier fallback; it is **not** a Liberation font.
+  The owned Activity copies fonts to its own `files/` and sets `APP_DATA_PATH`
+  to **dataDir**, because linuxfont appends `/files/`. Neither the extras VPK nor
+  another UID's private font installation is sufficient. Latin and Cyrillic are
+  covered; this does not bundle the optional CJK/Thai fallback fonts.
+* Sarek defaults to 720 pixels high, with width from the **actual ready Surface**
+  queried on SDL's native thread. For the reported 2309x1080 Surface that is
+  1539x720, not 640x480. Launcher GPU settings offer 1080p and Surface-native
+  alternatives. Height is capped to the actual Surface when using a preset.
+  Explicit `-w`/`-width` and `-h`/`-height` take precedence; a missing dimension
+  follows Surface aspect. Canonical dimensions are appended to owned argv only;
+  the companion GLES argument/configuration path is unchanged.
+* In the **staged, owned** SDL Java, all move/down/up/cancel touch normalization
+  uses `v.getWidth()/getHeight()`, not surface-buffer `mWidth/mHeight`.
+  MotionEvent positions are View-local. The pristine thirdparty checkout and
+  companion SDL are untouched. This corrects one scale-mismatch path; reported
+  difficult tapping still requires actual device verification, not an assumption
+  that every missed tap was caused by that path.
+* Android Sarek accepts `VK_SUBOPTIMAL_KHR` as a successful present in D3D9's
+  `SynchronizePresent`, consistent with its Presenter. Previously it invoked
+  `RecreateSwapChain`/`waitForIdle` for every such frame. OUT_OF_DATE, Surface loss,
+  device loss and epoch recovery remain errors/recreation paths. We do not force
+  `currentTransform` without the required rotation/blit work.
+* SDL Surface notifications compare native-window identity, Java Surface
+  generation and dimensions before advancing the epoch. Repeated identical
+  callbacks from buffer setup do not self-trigger recreation. Provider queries
+  only seed an empty state; they cannot consume a real replacement notification.
+  Resume/pause still invalidate on an actual state transition. The metadata lock
+  never encloses JNI/SDL window calls or Vulkan work; no SDL window mutex is
+  re-entered from its callback.
+
+Checks: launcher Java policy (aspect, presets, explicit/invalid dimensions),
+5 real TTF/cmap/Latin+Cyrillic/hash/license audits, staging/idempotence and APK
+missing/corrupt-font negatives, actual WSI ASan/UBSan host tests including 1000
+identical notifications, replacement/generation/resize/pause, and Vulkan status
+policy. These are not GPU or phone input tests. The APK audit requires the pinned
+font assets as well as the native runtime provenance.

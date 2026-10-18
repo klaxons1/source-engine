@@ -40,6 +40,7 @@
                 nativeIntent.putExtra("argv", UnderhellLaunchContract.buildArguments(cmdArgs.getText().toString(), false));
                 nativeIntent.putExtra("gamepath", mPref.getString("underhell_gamepath", "/storage/emulated/0/srceng"));
                 nativeIntent.putExtra("driver_id", mPref.getString("underhell_driver", ""));
+                nativeIntent.putExtra("render_height", mPref.getInt("underhell_render_height", 720));
                 startActivity(nativeIntent);
                 return;
             }

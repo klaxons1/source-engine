@@ -407,7 +407,7 @@ index 31dc7ade655dcb0cca9986e7a4209c754c0b888d..a395f4423c7b98f81c1d7a61859058c5
  
  
 diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
-index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..9f59c7bcf9beef5681ea0d9952541307420d59fb 100644
+index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..7fee9f0ea8b5e4fc5bd0f58457617b05dbca02b8 100644
 --- a/src/d3d9/d3d9_swapchain.cpp
 +++ b/src/d3d9/d3d9_swapchain.cpp
 @@ -9,170 +9,13 @@
@@ -614,6 +614,20 @@ index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..9f59c7bcf9beef5681ea0d9952541307
        Logger::err(e.message());
        return D3DERR_DEVICEREMOVED;
      }
+@@ -945,10 +802,11 @@ namespace dxvk {
+ 
+ 
+   void D3D9SwapChainEx::SynchronizePresent() {
+-    // Recreate swap chain if the previous present call failed
++    // Do not rebuild/waitForIdle every frame for a successful SUBOPTIMAL present.
++    // Geometry changes, Surface epochs and OUT_OF_DATE still trigger recreation.
+     VkResult status = m_device->waitForSubmission(&m_presentStatus);
+ 
+-    if (status != VK_SUCCESS)
++    if (wsi::androidPresentFailed(status))
+       RecreateSwapChain(m_vsync);
+   }
+ 
 diff --git a/src/d3d9/meson.build b/src/d3d9/meson.build
 index 34f4be64ee2e45afb11a666650cfd31ddd0f4ca8..634f68cff44769ae3dfa47df54a6f85bceb8b0fd 100644
 --- a/src/d3d9/meson.build
@@ -1918,13 +1932,18 @@ index 3db416da9552ebcc696e11a43474832ebc034bb6..f594ab0f36fc36a62c768933f6fb03cd
    void init();
    void quit();
 diff --git a/src/wsi/wsi_window.h b/src/wsi/wsi_window.h
-index 4787cebc8f85ca169a07e08a97db271ac1ece3bf..ee40f8eaf1f9c1571f9ffb0b744f695bfc8e0e31 100644
+index 4787cebc8f85ca169a07e08a97db271ac1ece3bf..5e0e067655e1976d2ae8ceb55619081915207fbf 100644
 --- a/src/wsi/wsi_window.h
 +++ b/src/wsi/wsi_window.h
-@@ -7,6 +7,8 @@
+@@ -7,6 +7,13 @@
  #include "../vulkan/vulkan_loader.h"
  
  namespace dxvk::wsi {
++  // SUBOPTIMAL is a successful present, not device/surface loss. Android may
++  // keep reporting it while the compositor transforms an otherwise valid image.
++  inline bool androidPresentFailed(VkResult status) {
++    return status != VK_SUCCESS && status != VK_SUBOPTIMAL_KHR;
++  }
 +  uint64_t androidSurfaceEpoch();
 +  void androidReleaseSurface(VkSurfaceKHR surface);
  

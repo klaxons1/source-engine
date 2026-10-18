@@ -2,6 +2,7 @@
 """Brand the pinned Android mod template without modifying native libraries."""
 import argparse
 import hashlib
+import json
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -84,7 +85,16 @@ def prepare(launcher):
     if not (sdl_java / "org/libsdl/app/SDLActivity.java").is_file():
         raise ValueError("Initialize the pinned thirdparty submodule for the owned SDL Java lifecycle")
     for helper in sdl_java.rglob("*.java"):
-        changes[android / "src" / helper.relative_to(sdl_java)] = helper.read_text(encoding="utf-8")
+        java = helper.read_text(encoding="utf-8")
+        if helper.name == "SDLActivity.java":
+            # MotionEvent coordinates are View-local pixels. Surface buffer size
+            # can differ on Vulkan (fixed buffers, cutout, compositor scaling).
+            for axis, dimension in (("X", "Width"), ("Y", "Height")):
+                old = "event.get" + axis + "(i) / m" + dimension
+                if java.count(old) != 3:
+                    raise ValueError("Pinned SDL touch normalization contract changed")
+                java = java.replace(old, "event.get" + axis + "(i) / Math.max(1, v.get" + dimension + "())")
+        changes[android / "src" / helper.relative_to(sdl_java)] = java
 
 
     # Binary distributions retain the third-party notices as readable APK assets.
@@ -134,6 +144,17 @@ def prepare(launcher):
         raise ValueError("Unexpected launcher display name")
     changes[path] = text.replace(">APP_NAME<", ">" + GAME + "<")
 
+    # Small, pinned and licensed native-runner fonts: no network or cross-UID
+    # reads from the companion's private files on the device.
+    font_root = ASSETS / "fonts"
+    manifest = json.loads((font_root / "manifest.json").read_text())
+    binary_changes = {android / "assets/fonts/manifest.json": (font_root / "manifest.json").read_bytes()}
+    for name, item in manifest["files"].items():
+        data = (font_root / name).read_bytes()
+        if hashlib.sha256(data).hexdigest() != item["sha256"]:
+            raise ValueError("Bundled font provenance/hash mismatch: " + name)
+        binary_changes[android / "assets/fonts" / name] = data
+
     # Validate every input first; don't leave a partially configured template.
     for path, text in changes.items():
         if "MOD_REPLACE_ME" in text or "APP_NAME" in text:
@@ -141,6 +162,9 @@ def prepare(launcher):
     for path, text in changes.items():
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
+    for path, data in binary_changes.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(data)
     print("Launcher: underhell; gamedir: underhell; package: " + PACKAGE)
 
 

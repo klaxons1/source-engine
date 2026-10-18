@@ -4,7 +4,7 @@
      SDL_UnlockMutex(Android_ActivityMutex);
  }
  
-+/* Underhell Vulkan host notification: only an atomic epoch update, no JNI/SDL calls. */
++/* Underhell host callback: must not re-enter SDL window APIs/Android_ActivityMutex. */
 +static void (*underhell_surface_callback)(void);
 +__attribute__((visibility("default"))) void SDL_UnderhellSetSurfaceCallback(void (*callback)(void)) {
 +    underhell_surface_callback = callback;

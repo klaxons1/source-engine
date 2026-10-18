@@ -6,6 +6,7 @@
 #include <memory>
 #include <cstring>
 #include <iostream>
+#include "../../../launcher/android/sarek_surface_state.h"
 extern "C" bool DXVKSarekSetAndroidDisplay(uint32_t, uint32_t, uint32_t, uint32_t);
 extern "C" int32_t ANativeWindow_getWidth(ANativeWindow* w) { return w->width; }
 extern "C" int32_t ANativeWindow_getHeight(ANativeWindow* w) { return w->height; }
@@ -35,6 +36,23 @@ static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL getProc(VkInstance, const char* 
 static VKAPI_ATTR PFN_vkVoidFunction VKAPI_CALL missingProc(VkInstance, const char*) { return nullptr; }
 int main() {
   using namespace dxvk::wsi;
+  assert(!androidPresentFailed(VK_SUCCESS));
+  assert(!androidPresentFailed(VK_SUBOPTIMAL_KHR));
+  assert(androidPresentFailed(VK_ERROR_OUT_OF_DATE_KHR));
+  assert(androidPresentFailed(VK_ERROR_SURFACE_LOST_KHR));
+  assert(androidPresentFailed(VK_ERROR_DEVICE_LOST));
+  SarekSurfaceState state;
+  assert(state.observe(123, 1, 2309, 1080, true));
+  for (int i = 0; i < 1000; ++i) assert(!state.observe(123, 1, 2309, 1080));
+  assert(state.observe(123, 2, 2309, 1080)); // same pointer/extent, new Java generation
+  assert(!state.observe(456, 3, 2309, 1080, true)); // queries cannot swallow a change
+  assert(state.observe(456, 3, 2309, 1080));
+  assert(state.observe(456, 3, 1080, 2309));
+  assert(state.observe(0, 0, 0, 0));
+  assert(!state.observe(0, 0, 0, 0));
+  assert(state.observe(456, 4, 2309, 1080, true)); // seed after pause, before compositor callbacks
+  assert(!state.observe(456, 4, 2309, 1080));
+
   WsiDriver* raw = nullptr;
   assert(AndroidWSI.createDriver(&raw));
   std::unique_ptr<WsiDriver> driver(raw);

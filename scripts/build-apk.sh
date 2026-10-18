@@ -11,6 +11,7 @@ SDK_REV=9c474caf7be38a887574291f611152fc24a7afe3
 git -C "$LAUNCHER" fetch --depth 1 origin "$LAUNCHER_REV"
 git -C "$LAUNCHER" checkout --detach "$LAUNCHER_REV"
 python3 "$ROOT/scripts/test-underhell-launch-contract.py"
+python3 "$ROOT/scripts/test-underhell-fonts.py"
 python3 "$ROOT/scripts/tests-underhell-touch.py"
 python3 "$ROOT/scripts/build-underhell-touch-assets.py" --check --launcher "$LAUNCHER"
 python3 "$ROOT/scripts/prepare-underhell-launcher.py" "$LAUNCHER"
