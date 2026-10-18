@@ -1,0 +1,50 @@
+"GameInfo"
+{
+	game		"Underhell"
+	title		"UNDERHELL"
+	type		singleplayer_only
+	supportsvr	0
+	SupportsDX8	0
+
+	FileSystem
+	{
+		// Content paths are relative to the Source Engine content root.
+		// Android launcher passes the exact lowercase gamedir: underhell.
+		SteamAppId	220
+		ToolsAppId	211
+
+		SearchPaths
+		{
+			// Underhell always has priority over Valve content. Saves, cfg files,
+			// generated navigation data and screenshots are written here too.
+			game+mod				|gameinfo_path|custom/*
+			game+mod+mod_write+default_write_path	|gameinfo_path|.
+			gamebin				|gameinfo_path|bin
+
+			// Mount base HL2 before the Episodes. Some filenames exist in more
+			// than one game (notably models/blackout.mdl), and Underhell maps use
+			// the HL2 version with vehicle_driver_eyes and the exit1 sequence.
+			game_lv				hl2/hl2_lv.vpk
+			game				hl2/hl2_english.vpk
+			game				hl2/hl2_pak.vpk
+			game				hl2/hl2_textures.vpk
+			game				hl2/hl2_sound_vo_english.vpk
+			game				hl2/hl2_sound_misc.vpk
+			game				hl2/hl2_misc.vpk
+			game				hl2
+
+			// Episode Two and Episode One are fallbacks for content that HL2 does
+			// not provide. Underhell's own files remain the highest priority.
+			game+mod				ep2/ep2_english.vpk
+			game+mod				ep2/ep2_pak.vpk
+			game				ep2
+			game				episodic/ep1_english.vpk
+			game				episodic/ep1_pak.vpk
+			game				episodic
+
+			// Engine UI and shared resources.
+			platform			platform/platform_misc.vpk
+			platform			platform
+		}
+	}
+}
