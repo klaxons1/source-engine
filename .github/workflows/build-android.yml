@@ -13,13 +13,22 @@ jobs:
         git clone https://github.com/ItzVladik/srceng-mod-launcher
         sudo apt-get update
         sudo apt-get install -f -y openjdk-17-jdk zip apksigner imagemagick lib32z1
+    - name: Download Android NDK r10e and clang 11.1.0
+      run: |
+        wget -q https://dl.google.com/android/ndk/android-ndk-r10e-linux-x86_64.bin -O ndk.bin
+        chmod +x ndk.bin
+        yes | ./ndk.bin > /dev/null
+        rm ndk.bin
+        wget -q https://github.com/llvm/llvm-project/releases/download/llvmorg-11.1.0/clang+llvm-11.1.0-x86_64-linux-gnu-ubuntu-16.04.tar.xz -O clang.tar.xz
+        tar -xf clang.tar.xz
+        rm clang.tar.xz
 #    - name: Build Android (32 bit)
 #      run: |
 #        scripts/build-android-armv7a.sh
     - name: Build Android (64 bit)
       run: |
         chmod +x scripts/build-android-aarch64.sh
-        scripts/build-android-aarch64.sh   
+        scripts/build-android-aarch64.sh
     - name: Build APK
       run: |
         chmod +x scripts/build-apk.sh
