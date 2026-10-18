@@ -150,6 +150,28 @@ class ContentTests(unittest.TestCase):
         self.assertTrue(asset.exists())
 
 
+class BuildDiagnosticsTests(unittest.TestCase):
+    def test_preserves_failure_code_and_escapes_annotation(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            log = Path(tmp) / "config.log"
+            log.write_text("compiler detail 100%\nnext line\n")
+            result = subprocess.run(
+                [sys.executable, str(ROOT / "scripts/run-android-waf.py"), "--config-log", str(log),
+                 sys.executable, "-c", "print('compile failed'); raise SystemExit(7)"],
+                env=dict(os.environ, GITHUB_ACTIONS="true"), capture_output=True, text=True)
+            self.assertEqual(result.returncode, 7)
+            self.assertIn("compile failed", result.stdout)
+            self.assertIn("::error title=Android Waf failure::", result.stdout)
+            self.assertIn("100%25%0Anext line", result.stdout)
+
+    def test_success_has_no_error_annotation(self):
+        result = subprocess.run(
+            [sys.executable, str(ROOT / "scripts/run-android-waf.py"), sys.executable, "-c", "print('ok')"],
+            env=dict(os.environ, GITHUB_ACTIONS="true"), capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(result.stdout, "ok\n")
+
+
 class FreeAimTests(unittest.TestCase):
     @unittest.skipUnless(shutil.which("g++"), "host C++ compiler not installed")
     def test_touch_uses_angular_deltas_without_double_sensitivity(self):
