@@ -2274,6 +2274,11 @@ IDirect3DDevice9* CShaderDeviceDx8::InvokeCreateDevice( void* hWnd, int nAdapter
 	}
 
 	// Otherwise we failed, show a message and shutdown
+#ifdef UNDERHELL_SAREK
+	DWarning( "init", 0, "Failed to create DXVK-Sarek / Vulkan device!\nError 0x%lX.\n"
+		"See *_d3d9.log in the game resource root for the Android WSI / Vulkan error.\n",
+		(unsigned long)(uint32_t)hr );
+#else
 	if ( pszMoreInfo )
 	{
 		DWarning( "init", 0, "Failed to create %s device!\nError 0x%lX: %s\n\nPlease see the following for more info.\n"
@@ -2284,6 +2289,7 @@ IDirect3DDevice9* CShaderDeviceDx8::InvokeCreateDevice( void* hWnd, int nAdapter
 		DWarning( "init", 0, "Failed to create %s device!\nError 0x%lX.\n\nPlease see the following for more info.\n"
 			"http://support.steampowered.com/cgi-bin/steampowered.cfg/php/enduser/std_adp.php?p_faqid=772\n", IsOpenGL() ? "OpenGL" : "D3D", hr );
 	}
+#endif // UNDERHELL_SAREK
 
 	return NULL;
 }

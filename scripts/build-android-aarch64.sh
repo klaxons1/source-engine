@@ -6,6 +6,9 @@ python3 -m pip install --quiet --target .cache/underhell-port/renderer-test-pyth
 PYTHONPATH="$PWD/.cache/underhell-port/renderer-test-python${PYTHONPATH:+:$PYTHONPATH}" python3 scripts/tests-underhell-renderer.py
 # Required target libraries, headers and physics sources are submodules.
 git submodule update --init --recursive
+# Exercise the actual pinned SDL Android default-selection block: omitting the
+# GL flag alone would silently create an EGL window and break native Vulkan.
+python3 scripts/test-underhell-sdl-window.py
 # Separate modern-toolchain runtime: static C++ and C/COM boundaries only.
 # Keep the established r10e/GNUSTL toolchain for the Source/game modules.
 python3 -m pip install --quiet --target .cache/underhell-port/vulkan-build-python cmake==3.31.6 ninja==1.11.1.4 meson==1.8.0

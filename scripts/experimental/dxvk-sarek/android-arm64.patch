@@ -1608,10 +1608,10 @@ index e263b16e445008f3fbdd208980b09dd55ec1d7d8..104a4b2b7ded4faf964c04d7e826f328
    /**
     * \brief Vulkan library loader
 diff --git a/src/vulkan/vulkan_presenter.cpp b/src/vulkan/vulkan_presenter.cpp
-index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499aa2494aa5 100644
+index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ccab270a0ec94c81263b73641b869e520c5361b0 100644
 --- a/src/vulkan/vulkan_presenter.cpp
 +++ b/src/vulkan/vulkan_presenter.cpp
-@@ -13,13 +13,7 @@ namespace dxvk::vk {
+@@ -13,16 +13,11 @@ namespace dxvk::vk {
            PresenterDevice device,
      const PresenterDesc&  desc)
    : m_vki(vki), m_vkd(vkd), m_device(device), m_window(window) {
@@ -1624,9 +1624,15 @@ index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499a
 -    }
 +    m_device.features.fullScreenExclusive = false; // Android has no Win32 exclusive mode
  
-     if (createSurface() != VK_SUCCESS)
-       throw DxvkError("Failed to create surface");
-@@ -46,6 +40,8 @@ namespace dxvk::vk {
+-    if (createSurface() != VK_SUCCESS)
+-      throw DxvkError("Failed to create surface");
++    VkResult surfaceStatus = createSurface();
++    if (surfaceStatus != VK_SUCCESS)
++      throw DxvkError(str::format("Android WSI: Failed to create surface, VkResult=", surfaceStatus));
+ 
+     if (recreateSwapChain(desc) != VK_SUCCESS)
+       throw DxvkError("Failed to create swap chain");
+@@ -46,6 +41,8 @@ namespace dxvk::vk {
  
  
    VkResult Presenter::acquireNextImage(PresenterSync& sync, uint32_t& index) {
@@ -1635,7 +1641,7 @@ index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499a
      sync = m_semaphores.at(m_frameIndex);
  
      // Don't acquire more than one image at a time
-@@ -64,6 +60,8 @@ namespace dxvk::vk {
+@@ -64,6 +61,8 @@ namespace dxvk::vk {
  
  
    VkResult Presenter::presentImage() {
@@ -1644,7 +1650,7 @@ index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499a
      PresenterSync sync = m_semaphores.at(m_frameIndex);
  
      VkPresentInfoKHR info;
-@@ -104,6 +102,12 @@ namespace dxvk::vk {
+@@ -104,6 +103,12 @@ namespace dxvk::vk {
      if (m_swapchain)
        destroySwapchain();
  
@@ -1657,7 +1663,7 @@ index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499a
      // Query surface capabilities. Some properties might
      // have changed, including the size limits and supported
      // present modes, so we'll just query everything again.
-@@ -443,6 +447,7 @@ namespace dxvk::vk {
+@@ -443,23 +448,30 @@ namespace dxvk::vk {
  
  
    VkResult Presenter::createSurface() {
@@ -1665,23 +1671,34 @@ index 57c1737ac3b488e93cab74ce1be5895dc921e9d6..ec91a252bf535f9dd223c809d168499a
      VkResult status = wsi::createSurface(m_window,
        m_vki->getLoaderProc(),
        m_vki->instance(),
-@@ -454,11 +459,13 @@ namespace dxvk::vk {
+       &m_surface);
+ 
+-    if (status != VK_SUCCESS)
++    if (status != VK_SUCCESS) {
++      Logger::err(str::format("Android WSI: native window / vkCreateAndroidSurfaceKHR failed, VkResult=", status));
+       return status;
++    }
+ 
      VkBool32 supportStatus = VK_FALSE;
  
      if ((status = m_vki->vkGetPhysicalDeviceSurfaceSupportKHR(m_device.adapter,
 -        m_device.queueFamily, m_surface, &supportStatus)) != VK_SUCCESS)
 +        m_device.queueFamily, m_surface, &supportStatus)) != VK_SUCCESS) {
++      Logger::err(str::format("Android WSI: vkGetPhysicalDeviceSurfaceSupportKHR failed, VkResult=", status));
 +      destroySurface();
        return status;
 +    }
  
      if (!supportStatus) {
 -      m_vki->vkDestroySurfaceKHR(m_vki->instance(), m_surface, nullptr);
+-      return VK_ERROR_OUT_OF_HOST_MEMORY; // just abuse this
++      Logger::err(str::format("Android WSI: graphics queue family ", m_device.queueFamily, " cannot present to this Surface"));
 +      destroySurface();
-       return VK_ERROR_OUT_OF_HOST_MEMORY; // just abuse this
++      return VK_ERROR_INITIALIZATION_FAILED;
      }
  
-@@ -486,6 +493,7 @@ namespace dxvk::vk {
+     return VK_SUCCESS;
+@@ -486,6 +498,7 @@ namespace dxvk::vk {
  
    void Presenter::destroySurface() {
      m_vki->vkDestroySurfaceKHR(m_vki->instance(), m_surface, nullptr);

@@ -13,16 +13,17 @@ import java.util.*;
 public final class UnderhellSarekActivity extends SDLActivity {
     private static native void configureNative(String[] keys, String[] values, int width, int height, int refreshMilliHz);
     private static native void nativeSetResumed(boolean resumed);
-    @Override protected void onPause() {
-        // Stop WSI access before SDL waits for the render thread's pause acknowledgement.
+    @Override protected void pauseNativeThread() {
+        // Follow SDL's actual lifecycle: multi-window Android uses onStop/onStart,
+        // not onPause/onResume. Close the WSI gate before SDL's pause handshake.
         if (!mBrokenLibraries) nativeSetResumed(false);
-        super.onPause();
+        super.pauseNativeThread();
     }
-    @Override protected void onResume() {
-        // SDL may start its native thread in super.onResume(). Surface validity is
-        // checked separately; a missing/replaced Surface is never presented to.
+    @Override protected void resumeNativeThread() {
+        // Open the gate BEFORE SDL can start the native thread, including from
+        // onStart on Android 7+. Surface validity is still checked separately.
         if (!mBrokenLibraries) nativeSetResumed(true);
-        super.onResume();
+        super.resumeNativeThread();
     }
     @Override protected String[] getLibraries() { return new String[] { "SDL2", "launcher_sarek" }; }
     @Override protected String getMainFunction() { return "LauncherMainAndroid"; }

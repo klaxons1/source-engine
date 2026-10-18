@@ -821,13 +821,23 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	int x = SDL_WINDOWPOS_CENTERED;
 	int y = SDL_WINDOWPOS_CENTERED;
 	int flags = SDL_WINDOW_HIDDEN;
-#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	// Merely omitting OPENGL is not enough: SDL defaults Android windows to
+	// OPENGL when no graphics flag is set, claiming the Surface for EGL.
+	// Mark this window explicitly Vulkan so Sarek can own the Surface.
+	flags |= SDL_WINDOW_VULKAN;
+#elif defined( DX_TO_GL_ABSTRACTION )
 	flags |= SDL_WINDOW_OPENGL;
 #endif
 	m_Window = SDL_CreateWindow( pTitle, x, y, width, height, flags );
 
 	if (m_Window == NULL)
 		Error( "Failed to create SDL window: %s", SDL_GetError() );
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	if ( SDL_GetWindowFlags( m_Window ) & SDL_WINDOW_OPENGL )
+		Error( "Sarek requires a Vulkan SDL window, but SDL selected OpenGL/EGL" );
+	Msg( "Underhell Sarek: SDL Vulkan window created without EGL.\n" );
+#endif
 	SetAssertDialogParent( m_Window );
 
 #ifdef OSX

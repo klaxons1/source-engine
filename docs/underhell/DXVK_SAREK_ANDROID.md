@@ -168,3 +168,31 @@ Patches live in `scripts/experimental/`. The build retains Sarek/native zlib,
 DirectX-header LGPL/MinGW notices, SDL, BSD and NDK runtime notices in APK assets
 and the standalone SDK. Existing launcher/engine licensing remains applicable.
 No Wine runtime or GPL Generals project patch was copied.
+
+### Android Surface regression (Adreno 640 / Turnip)
+
+A device report reached `D3D9DeviceEx::ResetSwapChain`, then failed with
+`Failed to create surface`. The native launcher previously omitted both SDL
+OpenGL and Vulkan window flags. In our pinned SDL, `SDL_CreateWindow` **implicitly
+adds `SDL_WINDOW_OPENGL` on Android when no graphics flag is set**. The Android
+backend then creates an EGLSurface, which its own source explicitly documents
+as incompatible with `vkCreateAndroidSurfaceKHR`. Skipping our explicit GL-context
+setup was therefore insufficient. The Sarek launcher now requests
+`SDL_WINDOW_VULKAN` explicitly and rejects a resulting OpenGL window; GLES flags
+remain unchanged.
+
+The WSI availability gate also follows SDL's `resumeNativeThread` /
+`pauseNativeThread` hooks. On multi-window Android SDL can start the native thread
+in `onStart`, before `onResume`; gating only in Activity `onResume` leaves an
+initialization race. Surface validity and retained native-window ownership are
+still checked independently.
+
+`python3 scripts/test-underhell-sdl-window.py` compiles our actual flag-selection
+block together with the pinned SDL Android default-selection block for Sarek,
+GLES, and a negative control reproducing the old missing-Vulkan-flag bug. It also
+checks ordering of the lifecycle hooks. These are host regression checks, not a
+GPU/device test. Surface failures now include the Vulkan result and distinguish
+native-surface creation from queue presentation-support failures. The native
+engine error names DXVK-Sarek / Vulkan rather than the platform-wide OpenGL label.
+The user's Adreno 640 still needs a launch test with the corrected APK; fixing
+these integration defects does not prove subsequent game rendering.

@@ -109,7 +109,9 @@ def main():
         '-DANDROID_PLATFORM=android-28', '-DBUILD_SHARED_LIBS=ON', '-DCMAKE_CXX_STANDARD=17')
     run('cmake', '--build', adreno_build, '-j', args.jobs)
     run('cmake', '-S', sdl, '-B', sdl_build, *options,
-        '-DANDROID_PLATFORM=android-26', '-DSDL_SHARED=ON', '-DSDL_STATIC=OFF')
+        '-DANDROID_PLATFORM=android-26', '-DSDL_SHARED=ON', '-DSDL_STATIC=OFF', '-DVIDEO_VULKAN=ON')
+    if '#define SDL_VIDEO_VULKAN 1' not in (sdl_build / 'include/SDL_config.h').read_text():
+        raise RuntimeError('Owned SDL must support explicit Vulkan windows; refusing an EGL fallback')
     run('cmake', '--build', sdl_build, '-j', args.jobs)
     staging = args.staging.resolve()
     libs = staging / 'lib/arm64-v8a'
