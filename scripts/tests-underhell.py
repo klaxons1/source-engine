@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline regression checks for Underhell branding and case-sensitive wiring."""
 import importlib.util
+import hashlib
 import json
 import os
 import re
@@ -84,6 +85,11 @@ class LauncherTests(unittest.TestCase):
         manifest = ET.parse(self.android / "AndroidManifest.xml").getroot()
         self.assertEqual(manifest.get("package"), "com.valvesoftware.source.underhell")
         self.assertEqual(manifest.find("application").get(branding.ANDROID + "extractNativeLibs"), "true")
+        runner = manifest.find("application/activity[@" + branding.ANDROID + "name='me.nillerusr.UnderhellSarekActivity']")
+        self.assertIsNotNone(runner)
+        self.assertEqual(runner.get(branding.ANDROID + "process"), ":sarek")
+        self.assertEqual(runner.get(branding.ANDROID + "exported"), "false")
+        self.assertIn("UnderhellVulkanSettingsActivity", java)
         self.assertIn("FLAG_ACTIVITY_CLEAR_TASK", java)
         self.assertIn("UnderhellLaunchContract.requireLibraries", java)
         self.assertIn('getBoolean("underhell_astc", false)', java)
@@ -247,6 +253,36 @@ class ApkIdentityTests(unittest.TestCase):
             self.pack(dict(self.libraries, **{"lib/arm64-v8a/libclient.so": bad}))
             with self.assertRaises(ValueError):
                 apk_check.verify(self.apk, self.badging)
+
+    def test_vulkan_apk_requires_complete_runtime_provenance_hashes_and_java(self):
+        libraries = dict(self.libraries)
+        runtime = {"sarek": "0c0e8f6f62c7cb37dbf5d38413517efa00c08fef",
+                   "adrenotools": "8fae8ce254dfc1344527e05301e43f37dea2df80", "libraries_sha256": {}}
+        for module in ("SDL2", "hidapi", "dxvk_sarek_d3d9", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook"):
+            data = elf_fixture(module.encode())
+            libraries["lib/arm64-v8a/lib" + module + ".so"] = data
+            runtime["libraries_sha256"]["lib" + module + ".so"] = hashlib.sha256(data).hexdigest()
+        libraries["lib/arm64-v8a/libshaderapidx9_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_SHADERAPI_V1")
+        libraries["lib/arm64-v8a/liblauncher_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_LAUNCHER_V1")
+        libraries["assets/underhell-vulkan.json"] = json.dumps(runtime).encode()
+        libraries["classes.dex"] = b"Lme/nillerusr/UnderhellSarekActivity;Lme/nillerusr/UnderhellVulkanSettingsActivity;Lorg/libsdl/app/SDLActivity;"
+        self.pack(libraries)
+        self.assertIn("vulkan", apk_check.verify(self.apk, self.badging))
+        for missing in ("assets/underhell-vulkan.json", "lib/arm64-v8a/libmain_hook.so", "classes.dex"):
+            self.pack({k: v for k, v in libraries.items() if k != missing})
+            with self.assertRaises(ValueError):
+                apk_check.verify(self.apk, self.badging)
+        broken = dict(libraries)
+        broken["lib/arm64-v8a/libSDL2.so"] = elf_fixture(b"wrong SDL build")
+        self.pack(broken)
+        with self.assertRaisesRegex(ValueError, "Stale/replaced"):
+            apk_check.verify(self.apk, self.badging)
+        broken = dict(libraries)
+        runtime["sarek"] = "ordinary dxvk-native"
+        broken["assets/underhell-vulkan.json"] = json.dumps(runtime).encode()
+        self.pack(broken)
+        with self.assertRaisesRegex(ValueError, "provenance"):
+            apk_check.verify(self.apk, self.badging)
 
     def test_rejects_stale_staging(self):
         self.pack()

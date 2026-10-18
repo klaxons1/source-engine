@@ -20,6 +20,11 @@ static ANativeWindow* currentWindow(void* hwnd) {
     if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
     ANativeWindow* window = surface ? ANativeWindow_fromSurface(env, surface) : NULL;
     if (surface) env->DeleteLocalRef(surface);
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        if (window) ANativeWindow_release(window);
+        return NULL;
+    }
     return window; // acquired; Sarek WSI releases after using it
 }
 

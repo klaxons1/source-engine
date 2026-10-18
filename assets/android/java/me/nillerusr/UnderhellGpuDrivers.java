@@ -21,11 +21,22 @@ public final class UnderhellGpuDrivers {
     public static File root(Context context) throws IOException {
         // Older launcher versions made dataDir world-writable for VPK sharing.
         // Restore traversal-only access BEFORE installing any native code.
-        File data = new File(context.getApplicationInfo().dataDir);
-        if (!data.setWritable(false, false) || !data.setWritable(true, true))
-            throw new IOException("Cannot protect the application's data directory");
-        File root = new File(context.getNoBackupFilesDir(), "gpu-drivers");
-        UnderhellDriverArchive.privateDirectory(context.getNoBackupFilesDir());
+        File data = new File(context.getApplicationInfo().dataDir).getCanonicalFile();
+        File files = context.getFilesDir();
+        File noBackup = context.getNoBackupFilesDir();
+        // An older world's-writable directory must not leave predictable VPK
+        // staging paths writable, or allow a planted symlink to redirect storage.
+        if (!files.getCanonicalFile().equals(new File(data, "files"))
+                || !noBackup.getCanonicalFile().equals(new File(data, "no_backup")))
+            throw new IOException("Unexpected/symlinked private application storage");
+        for (File directory : new File[] { data, files }) {
+            if (!directory.setWritable(false, false) || !directory.setWritable(true, true))
+                throw new IOException("Cannot protect the application's data directories");
+        }
+        File root = new File(noBackup, "gpu-drivers");
+        UnderhellDriverArchive.privateDirectory(noBackup);
+        if (!root.getCanonicalFile().equals(new File(noBackup.getCanonicalFile(), "gpu-drivers")))
+            throw new IOException("Symlinked GPU driver storage refused");
         UnderhellDriverArchive.privateDirectory(root);
         return root;
     }
@@ -57,10 +68,11 @@ public final class UnderhellGpuDrivers {
         return new Driver(id, name, library, dir);
     }
     public static Driver selected(Context context, String id) throws Exception {
+        File storage = root(context); // restore private permissions even for system Vulkan
         if (id == null || id.isEmpty()) return null;
         if (!id.matches("[0-9a-f]{8}(-[0-9a-f]{4}){3}-[0-9a-f]{12}"))
             throw new IOException("Invalid installed driver identifier");
-        return read(new File(root(context), id));
+        return read(new File(storage, id));
     }
     public static List<Driver> installed(Context context) throws Exception {
         List<Driver> result = new ArrayList<Driver>();
