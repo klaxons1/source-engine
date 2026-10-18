@@ -123,7 +123,7 @@ struct DynGL {int bound=7;unsigned char *mapped=nullptr;bool unmapped=false;
 } dynGL;
 #define gGL (&dynGL)
 struct DynTex {
- DynLayout layout;DynLayout *m_layout=&layout;void *m_mapped=nullptr;bool wrote=false;
+ DynLayout layout;DynLayout *m_layout=&layout;unsigned char *m_mapped=nullptr;bool wrote=false;
  unsigned char expected[16];
  void WriteTexels(DynDesc *,bool){assert(dynGL.unmapped && dynGL.bound==0);
   assert(!memcmp(m_mapped,expected,16));wrote=true;}

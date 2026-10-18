@@ -4033,10 +4033,10 @@ void CGLMTex::Unlock( GLMTexLockParams *params )
                 {
                     // DXT software upload must read CPU bytes, not an unmapped
                     // address or a byte offset into a still-bound unpack PBO.
-                    char *copy = NULL;
+                    unsigned char *copy = NULL;
                     if (m_layout->m_format->m_chunkSize != 1) {
                         GLMTexLayoutSlice *dynamicSlice = &m_layout->m_slices[desc->m_sliceIndex];
-                        copy = (char *)malloc(dynamicSlice->m_storageSize);
+                        copy = (unsigned char *)malloc(dynamicSlice->m_storageSize);
                         if (!copy) Error("Underhell: dynamic DXT upload allocation failed");
                         memcpy(copy, (char *)m_mapped + dynamicSlice->m_storageOffset, dynamicSlice->m_storageSize);
                     }
