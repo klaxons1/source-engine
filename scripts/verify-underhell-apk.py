@@ -26,6 +26,11 @@ def verify(apk, badging, staging=None):
         members = archive.namelist()
         if len(members) != len(set(members)):
             raise ValueError("APK contains duplicate ZIP entries")
+        if staging is not None:
+            name = "assets/extras_dir.vpk"
+            if not (staging / name).is_file() or name not in members or archive.read(name) != (staging / name).read_bytes():
+                raise ValueError("APK is missing/stale Underhell touch texture VPK")
+            report["touch_vpk_sha256"] = hashlib.sha256(archive.read(name)).hexdigest()
         for module, marker in MARKERS.items():
             required = "lib/arm64-v8a/lib" + module + ".so"
             if required not in members:
@@ -58,7 +63,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("apk", type=Path)
     parser.add_argument("--sdk", type=Path, required=True)
-    parser.add_argument("--staging", type=Path)
+    parser.add_argument("--staging", type=Path, required=True)
     args = parser.parse_args()
     tools = []
     for version in sorted((args.sdk / "build-tools").iterdir(), reverse=True):

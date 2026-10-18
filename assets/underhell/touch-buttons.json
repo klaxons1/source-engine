@@ -1,0 +1,107 @@
+[
+  {
+    "name": "inventory",
+    "command": "cl_inventoryToggle",
+    "x": 0.15,
+    "y": 0.02,
+    "width": 0.06
+  },
+  {
+    "name": "aim",
+    "command": "ironsight_toggle",
+    "x": 0.217,
+    "y": 0.02,
+    "width": 0.06
+  },
+  {
+    "name": "nightvision",
+    "command": "NightVision_Toggle",
+    "x": 0.284,
+    "y": 0.02,
+    "width": 0.06
+  },
+  {
+    "name": "gasmask",
+    "command": "GasMask_Toggle",
+    "x": 0.351,
+    "y": 0.02,
+    "width": 0.06
+  },
+  {
+    "name": "laser",
+    "command": "laser_toggle",
+    "x": 0.15,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "silencer",
+    "command": "silencer_toggle",
+    "x": 0.217,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "firemode",
+    "command": "firemode_toggle",
+    "x": 0.284,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "objective",
+    "command": "DispObj",
+    "x": 0.351,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "kick",
+    "command": "uh_jake_kick",
+    "x": 0.52,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "grenade",
+    "command": "Throw_Nade",
+    "x": 0.587,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "bullettime",
+    "command": "impulse 110",
+    "x": 0.654,
+    "y": 0.18,
+    "width": 0.06
+  },
+  {
+    "name": "drop",
+    "command": "DropWeapon",
+    "x": 0.52,
+    "y": 0.34,
+    "width": 0.06
+  },
+  {
+    "name": "signal",
+    "command": "GiveSign",
+    "x": 0.587,
+    "y": 0.34,
+    "width": 0.06
+  },
+  {
+    "name": "skip",
+    "command": "SkipScene",
+    "x": 0.654,
+    "y": 0.34,
+    "width": 0.06
+  },
+  {
+    "name": "performance",
+    "command": "uh_android_fast_toggle",
+    "x": 0.52,
+    "y": 0.02,
+    "width": 0.06
+  }
+]

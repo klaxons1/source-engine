@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Brand the pinned Android mod template without modifying native libraries."""
 import argparse
+import hashlib
 from pathlib import Path
 import re
 import xml.etree.ElementTree as ET
@@ -33,6 +34,14 @@ def prepare(launcher):
             if start < 0 or end < 0:
                 raise ValueError("Unexpected launcher startup method layout")
             text = text[:start] + (ASSETS / "launcher-start.java.inc").read_text(encoding="utf-8") + text[end:]
+        if name == "ExtractAssets" and (android / "assets/extras_dir.vpk").is_file():
+            digest = hashlib.sha256((android / "assets/extras_dir.vpk").read_bytes()).hexdigest()
+            text, count = re.subn(r'(VPK_CHSM\s*=\s*)"[^"]*"', lambda m: m[1] + '"' + digest + '"', text)
+            if count != 1:
+                raise ValueError("Unexpected launcher VPK checksum contract")
+            # String identity comparison re-extracted the VPK on every launch.
+            text = re.sub(r'mPref.getString\(\s*"vpk_checksum",\s*""\s*\)\s*!=\s*VPK_CHSM',
+                          '!VPK_CHSM.equals( mPref.getString( "vpk_checksum", "" ) )', text)
         changes[path] = text
 
     helper = "java/me/nillerusr/UnderhellLaunchContract.java"

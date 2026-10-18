@@ -59,6 +59,10 @@ CTouchControls gTouch;
 static VTouchPanel g_TouchPanel;
 VTouchPanel *touch_panel = &g_TouchPanel;
 
+#ifdef UNDERHELL
+#include "underhell/uh_touch_controls.inl"
+#endif
+
 CTouchPanel::CTouchPanel( vgui::VPANEL parent ) : BaseClass( NULL, "TouchPanel" )
 {
 	SetParent( parent );
@@ -254,24 +258,24 @@ CON_COMMAND( touch_setgridcolor, "change grid color" )
 /*
 CON_COMMAND( touch_roundall, "round all buttons coordinates to grid" )
 {
-	
+
 }
 
 CON_COMMAND( touch_exportconfig, "export config keeping aspect ratio" )
 {
-	
+
 }
 
 CON_COMMAND( touch_reloadconfig, "load config, not saving changes" )
 {
-	
+
 }
 */
 
 /*
 CON_COMMAND( touch_fade, "start fade animation for selected buttons" )
 {
-	
+
 }
 
 CON_COMMAND( touch_toggleselection, "toggle visibility on selected button in editor" )
@@ -346,6 +350,10 @@ void CTouchControls::ResetToDefaults()
 		engine->ExecuteClientCmd(buf);
 	}
 
+#ifdef UNDERHELL
+	AddUnderhellButtons();
+	if ( initialized ) CreateAtlasTexture();
+#endif
 	WriteConfig();
 }
 
@@ -411,7 +419,11 @@ void CTouchControls::Init()
 	else
 		ResetToDefaults();
 
-	CTouchTexture *texture = new CTouchTexture;
+#ifdef UNDERHELL
+	// Upgrade an existing touch.cfg without wiping customized movement controls.
+	AddUnderhellButtons();
+#endif
+	CTouchTexture *texture = new CTouchTexture();
 	texture->isInAtlas = false;
 	texture->textureID = 0;
 	texture->X0 = 0; texture->X1 = 0; texture->Y0 = 0; texture->Y1 = 0;
@@ -427,6 +439,10 @@ void CTouchControls::Init()
 
 void CTouchControls::LevelInit()
 {
+#ifdef UNDERHELL
+	// Runs after startup/legacy profiles; no console exec or file copying required.
+	ActivateUnderhellButtons();
+#endif
 	m_bCutScene = false;
 	m_AlphaDiff = 0;
 	m_flHideTouch = 0;
@@ -445,130 +461,105 @@ int nextPowerOfTwo(int x)
 
 void CTouchControls::CreateAtlasTexture()
 {
-	char fullFileName[MAX_PATH];
-
-	int atlasSize = 0;
-
-	stbrp_rect *rects = (stbrp_rect*)malloc(textureList.Count()*sizeof(stbrp_rect));
-	memset(rects, 0, sizeof(stbrp_node)*textureList.Count());
-
-	if( touchTextureID )
-		vgui::surface()->DeleteTextureByID( touchTextureID );
-
-	int rectCount = 0;
-
-	for( int i = 0; i < textureList.Count(); i++ )
+	if ( touchTextureID ) vgui::surface()->DeleteTextureByID( touchTextureID );
+	touchTextureID = 0;
+	CUtlVector<stbrp_rect> rects;
+	int atlasArea = 0, largest = 0;
+	for ( int i = 0; i < textureList.Count(); ++i )
 	{
 		CTouchTexture *t = textureList[i];
-		Q_snprintf(fullFileName, MAX_PATH, "materials/%s.vtf", t->szName);
-
-		FileHandle_t fp;
-		fp = ::filesystem->Open( fullFileName, "rb" );
-		if( !fp )
+		if ( t->textureID ) vgui::surface()->DeleteTextureByID( t->textureID );
+		t->textureID = 0;
+		t->isInAtlas = false;
+		char filename[MAX_PATH];
+		Q_snprintf( filename, sizeof( filename ), "materials/%s.vtf", t->szName );
+		CUtlBuffer buffer;
+		t->vtf = CreateVTFTexture();
+		if ( !filesystem->ReadFile( filename, NULL, buffer ) || !t->vtf->Unserialize( buffer ) )
+		{
+			DestroyVTFTexture( t->vtf );
+			t->vtf = NULL;
+#ifdef UNDERHELL
+			// Native fallback matches the shipped VTFs, including when extras are absent.
+			t->vtf = UH_EmbeddedTouchTexture( t->szName );
+#endif
+		}
+		if ( t->vtf )
+		{
+			t->width = t->vtf->Width(); t->height = t->vtf->Height();
+			if ( ( t->vtf->Format() != IMAGE_FORMAT_RGBA8888 && t->vtf->Format() != IMAGE_FORMAT_BGRA8888 ) ||
+				t->width != t->height || t->width < 1 || t->width > 4096 || ( t->width & ( t->width - 1 ) ) )
+			{
+				DestroyVTFTexture( t->vtf ); t->vtf = NULL;
+			}
+		}
+		if ( !t->vtf )
 		{
 			t->textureID = vgui::surface()->CreateNewTextureID();
 			vgui::surface()->DrawSetTextureFile( t->textureID, t->szName, true, false );
 			continue;
 		}
-
-		::filesystem->Seek( fp, 0, FILESYSTEM_SEEK_TAIL );
-		int srcVTFLength = ::filesystem->Tell( fp );
-		::filesystem->Seek( fp, 0, FILESYSTEM_SEEK_HEAD );
-
-		CUtlBuffer buf;
-		buf.EnsureCapacity( srcVTFLength );
-		int bytesRead = ::filesystem->Read( buf.Base(), srcVTFLength, fp );
-		::filesystem->Close( fp );
-
-		buf.SeekGet( CUtlBuffer::SEEK_HEAD, 0 ); // Need to set these explicitly since ->Read goes straight to memory and skips them.
-		buf.SeekPut( CUtlBuffer::SEEK_HEAD, bytesRead );
-
-		t->vtf = CreateVTFTexture();
-		if (t->vtf->Unserialize(buf))
-		{
-			if( t->vtf->Format() != IMAGE_FORMAT_RGBA8888 && t->vtf->Format() != IMAGE_FORMAT_BGRA8888 )
-			{
-				t->textureID = vgui::surface()->CreateNewTextureID();
-				vgui::surface()->DrawSetTextureFile( t->textureID, t->szName, true, false);
-				DestroyVTFTexture(t->vtf);
-				continue;
-			}
-			if( t->vtf->Height() != t->vtf->Width() || (t->vtf->Height() & (t->vtf->Height() - 1)) != 0 )
-				Error("%s texture is wrong! Don't use npot textures for touch.");
-
-			t->height = t->vtf->Height();
-			t->width = t->vtf->Width();
-			t->isInAtlas = true;
-
-			atlasSize += t->width*t->height;
-		}
-		else
-		{
-			DestroyVTFTexture(t->vtf);
-			t->textureID = vgui::surface()->CreateNewTextureID();
-			vgui::surface()->DrawSetTextureFile( t->textureID, t->szName, true, false);
-			continue;
-		}
-
-		rects[rectCount].h = t->height;
-		rects[rectCount].w = t->width;
-		rectCount++;
+		if ( t->vtf->Format() == IMAGE_FORMAT_BGRA8888 )
+			t->vtf->ConvertImageFormat( IMAGE_FORMAT_RGBA8888, false );
+		stbrp_rect rect = {};
+		rect.id = i; rect.w = t->width; rect.h = t->height;
+		rects.AddToTail( rect );
+		atlasArea += t->width * t->height;
+		largest = MAX( largest, t->width );
 	}
-
-	if( !textureList.Count() || rectCount == 0 )
+	if ( rects.Count() == 0 ) return;
+	int atlasHeight = nextPowerOfTwo( MAX( largest, (int)ceil( sqrt( (double)atlasArea ) ) ) );
+	CUtlVector<stbrp_node> nodes;
+	bool packed = false;
+	while ( atlasHeight <= 4096 )
 	{
-		free(rects);
+		nodes.SetCount( atlasHeight * 2 );
+		stbrp_context context;
+		stbrp_init_target( &context, atlasHeight, atlasHeight, nodes.Base(), nodes.Count() );
+		if ( stbrp_pack_rects( &context, rects.Base(), rects.Count() ) ) { packed = true; break; }
+		atlasHeight *= 2; // Mixed icon sizes may not fit even when total area fits.
+	}
+	if ( !packed )
+	{
+		// Safe material fallback instead of using unchecked failed rectangle positions.
+		for ( int n = 0; n < rects.Count(); ++n )
+		{
+			CTouchTexture *t = textureList[rects[n].id];
+			DestroyVTFTexture( t->vtf ); t->vtf = NULL;
+			t->textureID = vgui::surface()->CreateNewTextureID();
+			vgui::surface()->DrawSetTextureFile( t->textureID, t->szName, true, false );
+		}
 		return;
 	}
-
-	int atlasHeight = nextPowerOfTwo(sqrt((double)atlasSize));
-	int sizeInBytes = atlasHeight*atlasHeight*4;
-	unsigned char *dest = new unsigned char[sizeInBytes];
-	memset(dest, 0, sizeInBytes);
-
-	int nodesCount = atlasHeight * 2;
-	stbrp_node *nodes = (stbrp_node*)malloc(nodesCount*sizeof(stbrp_node));
-	memset(nodes, 0, sizeof(stbrp_node)*nodesCount);
-
-	stbrp_context context;
-	stbrp_init_target( &context, atlasHeight, atlasHeight, nodes, nodesCount );
-	stbrp_pack_rects(&context, rects, rectCount);
-
-	rectCount = 0;
-	for( int i = 0; i < textureList.Count(); i++ )
+	CUtlVector<unsigned char> pixels;
+	pixels.SetCount( atlasHeight * atlasHeight * 4 );
+	memset( pixels.Base(), 0, pixels.Count() );
+	for ( int n = 0; n < rects.Count(); ++n )
 	{
-		CTouchTexture *t = textureList[i];
-		if( t->textureID )
-			continue;
-
-		t->X0 = rects[rectCount].x / (float)atlasHeight;
-		t->Y0 = rects[rectCount].y / (float)atlasHeight;
-		t->X1 = t->X0 + t->width / (float)atlasHeight;
-		t->Y1 = t->Y0 + t->height / (float)atlasHeight;
-
-		unsigned char *src = t->vtf->ImageData(0, 0, 0);
-		for( int row = 0; row < t->height; row++)
-		{
-			unsigned char *row_dest = dest+(row+rects[rectCount].y)*atlasHeight*4+rects[rectCount].x*4;
-			unsigned char *row_src = src+row*t->height*4;
-
-			memcpy(row_dest, row_src, t->height*4);
-		}
-		rectCount++;
-
-		DestroyVTFTexture(t->vtf);
+		const stbrp_rect &rect = rects[n];
+		CTouchTexture *t = textureList[rect.id];
+		t->isInAtlas = true;
+		t->X0 = rect.x / (float)atlasHeight; t->Y0 = rect.y / (float)atlasHeight;
+		t->X1 = ( rect.x + t->width ) / (float)atlasHeight;
+		t->Y1 = ( rect.y + t->height ) / (float)atlasHeight;
+		const unsigned char *source = t->vtf->ImageData( 0, 0, 0 );
+		for ( int row = 0; row < t->height; ++row )
+			memcpy( pixels.Base() + ( ( row + rect.y ) * atlasHeight + rect.x ) * 4,
+				source + row * t->width * 4, t->width * 4 );
+		DestroyVTFTexture( t->vtf ); t->vtf = NULL;
 	}
-
 	touchTextureID = vgui::surface()->CreateNewTextureID( true );
-	vgui::surface()->DrawSetTextureRGBA( touchTextureID, dest, atlasHeight, atlasHeight, 1, true );
-
-	free(nodes);
-	free(rects);
-	delete[] dest;
+	vgui::surface()->DrawSetTextureRGBA( touchTextureID, pixels.Base(), atlasHeight, atlasHeight, 1, true );
 }
 
 void CTouchControls::Shutdown( )
 {
+#ifdef UNDERHELL
+	uh_android_fast.SetValue( false );
+#endif
+	// VGui_Shutdown already released surface textures before this callback.
+	initialized = false;
+	touchTextureID = 0;
 	textureList.PurgeAndDeleteElements();
 	btns.PurgeAndDeleteElements();
 }
@@ -584,7 +575,7 @@ void CTouchControls::ListButtons()
 	for( it = btns.begin(); it != btns.end(); it++ )
 	{
 		CTouchButton *b = *it;
-	
+
 		Msg( "%s %s %s %f %f %f %f %d %d %d %d %d\n",
 			b->name, b->texturefile, b->command,
 			b->x1, b->y1, b->x2, b->y2,
@@ -693,6 +684,11 @@ void CTouchControls::Paint()
 		}
 	}
 
+	bool needsAtlas = false;
+	for ( it = btns.begin(); it != btns.end(); ++it )
+		if ( (*it)->texture && !(*it)->texture->textureID && !(*it)->texture->isInAtlas ) needsAtlas = true;
+	if ( needsAtlas ) CreateAtlasTexture();
+
 	CMatRenderContextPtr pRenderContext( g_pMaterialSystem );
 	int meshCount = 0;
 
@@ -738,52 +734,53 @@ void CTouchControls::Paint()
 
 				m_pMesh->Draw();
 			}
-			else if( !btn->texture->isInAtlas )
-				CreateAtlasTexture();
 
 			if( !t->textureID )
 				meshCount++;
 		}
 	}
 
-	m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
-	meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
-
-	for( it = btns.begin(); it != btns.end(); it++ )
+	if ( meshCount > 0 && touchTextureID )
 	{
-		CTouchButton *btn = *it;
+		m_pMesh = pRenderContext->GetDynamicMesh( true, NULL, NULL, g_pMatSystemSurface->DrawGetTextureMaterial(touchTextureID) );
+		meshBuilder.Begin( m_pMesh, MATERIAL_QUADS, meshCount );
 
-		if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID )
+		for( it = btns.begin(); it != btns.end(); it++ )
 		{
-			CTouchTexture *t = btn->texture;
+			CTouchButton *btn = *it;
 
-			int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
-			rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
+			if( btn->texture != NULL && !(btn->flags & TOUCH_FL_HIDE) && !btn->texture->textureID )
+			{
+				CTouchTexture *t = btn->texture;
 
-			meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X0, t->Y0 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				int alpha = (btn->color.a > MIN_ALPHA_IN_CUTSCENE) ? max(MIN_ALPHA_IN_CUTSCENE, btn->color.a-m_AlphaDiff) : btn->color.a;
+				rgba_t color(btn->color.r, btn->color.g, btn->color.b, alpha);
 
-			meshBuilder.Position3f( btn->x2*screen_w, btn->y1*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X1, t->Y0 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x1*screen_w, btn->y1*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X0, t->Y0 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
-			meshBuilder.Position3f( btn->x2*screen_w, btn->y2*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X1, t->Y1 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x2*screen_w, btn->y1*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X1, t->Y0 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
 
-			meshBuilder.Position3f( btn->x1*screen_w, btn->y2*screen_h, 0 );
-			meshBuilder.Color4ubv( color );
-			meshBuilder.TexCoord2f( 0, t->X0, t->Y1 );
-			meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+				meshBuilder.Position3f( btn->x2*screen_w, btn->y2*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X1, t->Y1 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+
+				meshBuilder.Position3f( btn->x1*screen_w, btn->y2*screen_h, 0 );
+				meshBuilder.Color4ubv( color );
+				meshBuilder.TexCoord2f( 0, t->X0, t->Y1 );
+				meshBuilder.AdvanceVertexF<VTX_HAVEPOS | VTX_HAVECOLOR, 1>();
+			}
 		}
-	}
 
-	meshBuilder.End();
-	m_pMesh->Draw();
+		meshBuilder.End();
+		m_pMesh->Draw();
+	}
 
 
 	if( m_flHideTouch < gpGlobals->curtime )
@@ -846,7 +843,7 @@ void CTouchControls::AddButton( const char *name, const char *texturefile, const
 		}
 	}
 
-	CTouchTexture *texture = new CTouchTexture;
+	CTouchTexture *texture = new CTouchTexture();
 	btn->texture = texture;
 	texture->isInAtlas = false;
 	texture->textureID = 0;
@@ -868,7 +865,23 @@ void CTouchControls::HideButton(const char *name)
 {
 	CTouchButton *btn =	FindButton( name );
 	if( btn )
+	{
 		btn->flags |= TOUCH_FL_HIDE;
+#ifdef UNDERHELL
+		// Hidden buttons no longer receive FingerUp. Release captured input now.
+		if ( btn->finger != -1 )
+		{
+			if ( btn->command[0] == '+' )
+			{
+				char release[256]; Q_strncpy( release, btn->command, sizeof( release ) );
+				release[0] = '-'; engine->ClientCmd_Unrestricted( release );
+			}
+			if ( btn->type == touch_move ) { forward = side = 0; move_finger = -1; }
+			if ( btn->type == touch_look ) look_finger = -1;
+			btn->finger = -1;
+		}
+#endif
+	}
 }
 
 void CTouchControls::SetTexture(const char *name, const char *file)
@@ -934,7 +947,7 @@ void CTouchControls::ProcessEvent(touch_event_t *ev)
 		EditEvent(ev);
 		return;
 	}
-	
+
 	if( ev->type == IE_FingerMotion )
 		FingerMotion( ev );
 	else
@@ -947,7 +960,7 @@ void CTouchControls::EditEvent(touch_event_t *ev)
 	const float y = ev->y;
 
 	//CUtlLinkedList<CTouchButton*>::iterator it;
-	
+
 	if( ev->type == IE_FingerDown )
 	{		
 		//for( it = btns.end(); it != btns.begin(); it-- ) unexpected, doesn't work
@@ -958,7 +971,7 @@ void CTouchControls::EditEvent(touch_event_t *ev)
 			{
 				if( btn->flags & TOUCH_FL_HIDE )
 					continue;
-				
+
 				if( btn->flags & TOUCH_FL_NOEDIT )
 				{
 					engine->ClientCmd_Unrestricted( btn->command );
@@ -1048,6 +1061,25 @@ void CTouchControls::FingerPress(touch_event_t *ev)
 
 	if( ev->type == IE_FingerDown )
 	{
+#ifdef UNDERHELL
+		CTouchButton *action = NULL;
+		for ( it = btns.begin(); it != btns.end(); ++it )
+		{
+			CTouchButton *candidate = *it;
+			if ( candidate->type != touch_move && candidate->type != touch_look &&
+				!( candidate->flags & TOUCH_FL_HIDE ) && x > candidate->x1 && x < candidate->x2 &&
+				y > candidate->y1 && y < candidate->y2 ) action = candidate;
+		}
+		if ( action )
+		{
+			if ( action->finger == -1 )
+			{
+				action->finger = ev->fingerid;
+				engine->ClientCmd_Unrestricted( action->command );
+			}
+			return; // Do not drag the fullscreen joystick/look zone with this finger.
+		}
+#endif
 		for( it = btns.begin(); it != btns.end(); it++ )
 		{
 			CTouchButton *btn = *it;
@@ -1162,6 +1194,10 @@ void CTouchControls::WriteConfig()
 		filesystem->FPrintf( f, "//=======================================================================\n" );
 		filesystem->FPrintf( f, "\ntouch_config_file \"%s\"\n", touch_config_file.GetString() );
 		filesystem->FPrintf( f, "\n// touch cvars\n" );
+#ifdef UNDERHELL
+		filesystem->FPrintf( f, "uh_touch_layout_version %d\nuh_touch_buttons %d\ntouch_enable %d\ntouch_draw %d\n",
+			uh_touch_layout_version.GetInt(), uh_touch_buttons.GetInt(), touch_enable.GetInt(), touch_draw.GetInt() );
+#endif
 		filesystem->FPrintf( f, "\n// sensitivity settings\n" );
 		filesystem->FPrintf( f, "touch_pitch \"%f\"\n", touch_pitch.GetFloat() );
 		filesystem->FPrintf( f, "touch_yaw \"%f\"\n", touch_yaw.GetFloat() );
@@ -1203,7 +1239,7 @@ void CTouchControls::WriteConfig()
 		for( it = btns.begin(); it != btns.end(); it++ )
 		{
 			CTouchButton *b = *it;
-		
+
 			if( b->flags & TOUCH_FL_CLIENT )
 				continue; //skip temporary buttons
 
@@ -1212,9 +1248,9 @@ void CTouchControls::WriteConfig()
 
 			if( b->flags & TOUCH_FL_DEF_HIDE )
 				b->flags |= TOUCH_FL_HIDE;
-			
+
 			float aspect = ( b->y2 - b->y1 ) / ( ( b->x2 - b->x1 )/(screen_h/screen_w) );
-	
+
 			filesystem->FPrintf( f, "touch_addbutton \"%s\" \"%s\" \"%s\" %f %f %f %f %d %d %d %d %d %f\n",
 				b->name, b->texturefile, b->command,
 				b->x1, b->y1, b->x2, b->y2,

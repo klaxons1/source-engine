@@ -18,6 +18,59 @@ and supplies its own game directory and native library directory, as the templat
 already did. The APK does not contain Underhell's copyrighted models/maps/sounds
 or the base Half-Life 2 content.
 
+## Underhell touch controls and TOGL ES load
+
+The Underhell client installs 14 action buttons plus an optional graphics-profile
+button after loading the existing touch profile. **Install/update the launcher
+APK and start a map: no separate ZIP, copying materials, console exec or launcher
+arguments are needed.** On the first map after the update a versioned migration
+enables `touch_enable`, `touch_draw` and `uh_touch_buttons`, shows the new actions,
+and saves the profile with a backup. Subsequent maps respect deliberate hiding
+or disabling. Late startup profiles that remove all buttons have missing actions
+restored at map start. Existing positions, commands and colors are preserved;
+only missing `uh_*` buttons are added. The
+normal joystick, look, attack and jump buttons remain. `uh_touch_buttons 0/1`
+hides/shows the extras; `uh_touch_reset` resets only the Underhell controls.
+A command-button press consumes that finger rather than also dragging the
+fullscreen joystick/look zone; another finger can still move or aim.
+
+`scripts/build-underhell-touch-assets.py` reproducibly generates 15 original
+64x64 VTF 7.2 RGBA8888 icons and matching VMTs, a manual installation CFG and a
+compact palette/RLE native fallback with byte-identical pixels. No Pillow or
+external texture converter is required. The APK build checks generated files,
+runs the production C++ policy tests, packs the VTF/VMTs into an inline VPK v1,
+and updates the extraction checksum. The final APK gate also verifies that
+`assets/extras_dir.vpk` is present and identical to the staged file. No gameinfo
+or copyrighted game content is packaged. The fallback makes automatic native
+buttons independent of whether a particular companion mounts the extras VPK.
+
+All new icons share the existing touch atlas/draw batch. Atlas rebuilds happen
+before drawing and not on each button or visibility toggle. Rebuilds release
+old texture IDs, convert BGRA correctly, check rectangle packing, and grow the
+atlas before copying rather than using unchecked failed placements. Initial
+texture pointers are zeroed; an empty atlas does not issue an invalid draw.
+
+`uh_android_fast 1` (the lightning button) is **optional and off by default**.
+It lowers GPU load by disabling flashlight-depth and render-to-texture shadows,
+forced expensive/entity water reflections and motion blur. It does not change
+VSync, force unsafe threading, remove synchronization, or turn off night vision
+or the flashlight beam. `uh_android_fast 0` restores the captured values in the
+current session, unless the player has manually changed a setting since enabling
+it. Missing companion CVars are skipped. Turn it off before saving/exit if you
+want the original archived graphics settings retained. This is a quality tradeoff,
+not proof of a TOGL ES renderer speedup; actual profiling needs phone/GPU/FPS data.
+The companion renderer itself is not replaced by a client/server-only mod APK.
+
+For the **already-installed APK**, merge the loose `assets/underhell/materials`
+and `assets/underhell/cfg` files into the resource directory, then run
+`exec underhell_touch.cfg` (or add `+exec underhell_touch.cfg` to launcher arguments).
+This adds 14 existing gameplay commands, without requiring a new native build;
+use `touch_writeconfig` to save the layout. The optional manual
+`underhell_android_fast.cfg` uses existing renderer CVars but is **not** an
+in-session reversible toggle: back up `config.cfg` first. See
+`assets/underhell/README-touch-ru.txt`. The manual pack does not add new native
+commands, touch input fixes or automatic installation to an old APK.
+
 ## If Lost Coast starts or Underhell features are missing
 
 The former sender relied only on `gamedir` / `gamelibdir` Intent extras. The

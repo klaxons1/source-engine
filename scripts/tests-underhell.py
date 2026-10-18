@@ -28,6 +28,8 @@ def load(name, filename):
 branding = load("underhell_branding", "prepare-underhell-launcher.py")
 content_check = load("underhell_content", "check-underhell-content.py")
 apk_check = load("underhell_apk", "verify-underhell-apk.py")
+touch_tests = load("underhell_touch_tests", "tests-underhell-touch.py")
+TouchTests = touch_tests.TouchTests
 java_tests = load("underhell_java_tests", "test-underhell-launch-contract.py")
 
 
@@ -50,6 +52,8 @@ class LauncherTests(unittest.TestCase):
             path = self.android / "src/me/nillerusr" / (name + ".java")
             path.parent.mkdir(parents=True, exist_ok=True)
             text = "import com.valvesoftware.source.MOD_REPLACE_ME.R;\n"
+            if name == "ExtractAssets":
+                text += 'public static final String VPK_CHSM = "";\n'
             if name == "LauncherActivity":
                 text += 'public static String MOD_NAME = "MOD_REPLACE_ME";\n'
                 text += '\tprivate Intent prepareIntent( Intent i ) {\n'
@@ -108,9 +112,12 @@ class LauncherTests(unittest.TestCase):
         launcher = root / "srceng-mod-launcher"
         launcher.mkdir()
         shutil.copytree(self.android, launcher / "android")
-        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py"):
+        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
             shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
-        shutil.copytree(ROOT / "assets/android", root / "assets/android")
+        shutil.copytree(ROOT / "assets", root / "assets")
+        (root / "game/client/underhell").mkdir(parents=True)
+        for name in ("uh_touch_assets.h", "uh_touch_controls.inl"):
+            shutil.copy2(ROOT / "game/client/underhell" / name, root / "game/client/underhell" / name)
         shutil.copytree(ROOT / "scripts/tests", root / "scripts/tests")
         bin_dir = root / "bin"
         bin_dir.mkdir()
@@ -129,7 +136,8 @@ class LauncherTests(unittest.TestCase):
                        "if sys.argv[1] == 'build':\n"
                        " pathlib.Path('build/android').mkdir(parents=True, exist_ok=True)\n"
                        " with zipfile.ZipFile('build/android/mod-signed.apk','w') as z:\n"
-                       "  for p in pathlib.Path('android/lib').rglob('*.so'): z.write(p, str(p.relative_to('android')))\n")
+                       "  for p in pathlib.Path('android').rglob('*'):\n"
+                       "   if p.is_file() and (p.suffix == '.so' or p.name == 'extras_dir.vpk'): z.write(p, str(p.relative_to('android')))\n")
         aapt = launcher / "android-sdk/build-tools/test/aapt"
         aapt.parent.mkdir(parents=True)
         aapt.write_text("#!/bin/sh\nprintf \"package: name='com.valvesoftware.source.underhell'\\napplication-label:'underhell'\\n\"\n")
@@ -173,6 +181,7 @@ class ApkIdentityTests(unittest.TestCase):
         with zipfile.ZipFile(self.apk, "w") as archive:
             for name, data in (self.libraries if libraries is None else libraries).items():
                 archive.writestr(name, data)
+            archive.writestr("assets/extras_dir.vpk", b"touch VPK fixture")
 
     def test_valid_native_modules_and_staging_hashes(self):
         self.pack()
@@ -180,8 +189,32 @@ class ApkIdentityTests(unittest.TestCase):
             path = self.root / "android" / name
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
+        extra = self.root / "android/assets/extras_dir.vpk"
+        extra.parent.mkdir(parents=True)
+        extra.write_bytes(b"touch VPK fixture")
         result = apk_check.verify(self.apk, self.badging, self.root / "android")
         self.assertEqual(len(result["libraries"]), 2)
+
+    def test_rejects_absent_or_stale_embedded_touch_assets(self):
+        stage = self.root / "android"
+        for name, data in self.libraries.items():
+            path = stage / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        self.pack()
+        with self.assertRaisesRegex(ValueError, "touch texture VPK"):
+            apk_check.verify(self.apk, self.badging, stage)
+        vpk = stage / "assets/extras_dir.vpk"
+        vpk.parent.mkdir(parents=True)
+        vpk.write_bytes(b"different generation")
+        with self.assertRaisesRegex(ValueError, "touch texture VPK"):
+            apk_check.verify(self.apk, self.badging, stage)
+        with zipfile.ZipFile(self.apk, "w") as archive:
+            for name, data in self.libraries.items():
+                archive.writestr(name, data)
+        vpk.write_bytes(b"touch VPK fixture")
+        with self.assertRaisesRegex(ValueError, "touch texture VPK"):
+            apk_check.verify(self.apk, self.badging, stage)
 
     def test_rejects_old_package_and_wrong_label(self):
         self.pack()
