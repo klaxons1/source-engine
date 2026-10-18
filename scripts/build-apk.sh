@@ -1,4 +1,4 @@
-export ICON=lc.png
+export ICON=icons/lc.png
 export PACKAGE=lostcoast
 export APP_NAME="Half-Life 2"
 cd srceng-mod-launcher
