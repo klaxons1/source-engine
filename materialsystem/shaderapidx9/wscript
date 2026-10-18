@@ -75,6 +75,16 @@ def build(bld):
 		libs += ['D3D9', 'D3DX9', 'bzip2']
 	
 	linkflags = []
+	if bld.env.SAREK_SDK:
+		from scripts.sarek_waf import native_env, native_includes
+		bld.read_shlib('dxvk_sarek_d3d9', paths=[bld.env.SAREK_SDK], export_includes=[])
+		bld.shlib(source=source + ['sarek_math.cpp'], target='shaderapidx9_sarek',
+			name='shaderapidx9_sarek', env=native_env(bld), features='c cxx',
+			includes=includes + native_includes(bld), defines=defines,
+			use=['tier0','tier1','tier2','vstdlib','bitmap_sarek','mathlib','SDL2','dxvk_sarek_d3d9','ANDROID_SUPPORT'],
+			linkflags=['-Wl,-Bsymbolic'], install_path=bld.env.LIBDIR,
+			idx=bld.get_taskgen_count())
+
 	if bld.env.DEST_OS == 'android' and bld.env.TOGLES:
 		# The companion launcher already loaded its own libtogl.so. Embed ours
 		# in the explicitly mod-loaded shaderapi; bind data AND functions locally.

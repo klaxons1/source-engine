@@ -751,7 +751,11 @@ bool CSourceAppSystemGroup::Create()
 
 	// Load up the appropriate shader DLL
 	// This has to be done before connection.
+	#ifdef UNDERHELL_VULKAN_LAUNCHER
+	char const* pDLLName = "shaderapidx9_sarek" DLL_EXT_STRING;
+#else
 	char const* pDLLName = "shaderapidx9" DLL_EXT_STRING;
+#endif
 	if ( CommandLine()->FindParm( "-noshaderapi" ) )
 	{
 		pDLLName = "shaderapiempty" DLL_EXT_STRING;

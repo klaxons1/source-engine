@@ -20,6 +20,20 @@
 	{
 		try
 		{
+			if (mPref.getString("underhell_renderer", "gles").equals("sarek")) {
+                UnderhellLaunchContract.requireLibraries(getApplicationInfo().nativeLibraryDir);
+                for (String module : new String[] { "shaderapidx9_sarek", "launcher_sarek", "dxvk_sarek_d3d9", "SDL2", "hidapi", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook" })
+                    if (!new java.io.File(getApplicationInfo().nativeLibraryDir, "lib" + module + ".so").isFile())
+                        throw new java.io.IOException("Incomplete Sarek APK: missing " + module);
+                saveSettings(mPref.edit());
+                Intent nativeIntent = new Intent(this, UnderhellSarekActivity.class);
+                nativeIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                nativeIntent.putExtra("argv", UnderhellLaunchContract.buildArguments(cmdArgs.getText().toString(), false));
+                nativeIntent.putExtra("gamepath", mPref.getString("underhell_gamepath", "/storage/emulated/0/srceng"));
+                nativeIntent.putExtra("driver_id", mPref.getString("underhell_driver", ""));
+                startActivity(nativeIntent);
+                return;
+            }
 			Intent intent = new Intent();
 			intent.setComponent( new ComponentName( "com.valvesoftware.source", "org.libsdl.app.SDLActivity" ) );
 			intent = prepareIntent( intent );

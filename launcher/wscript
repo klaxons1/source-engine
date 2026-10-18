@@ -61,3 +61,11 @@ def build(bld):
 		idx      = bld.get_taskgen_count()
 	)
 
+
+	if bld.env.SAREK_SDK:
+		bld.shlib(source=source + ['android/sarek_bridge.cpp'], target='launcher_sarek',
+			name='launcher_sarek', features='c cxx', includes=includes + [bld.env.SAREK_SDK + '/include'],
+			defines=defines + ['UNDERHELL_VULKAN_LAUNCHER=1'],
+			use=[x if x != 'appframework' else 'appframework_sarek' for x in libs] + ['dxvk_sarek_d3d9'],
+			lib=['android','log','dl'], linkflags=['-Wl,-Bsymbolic'],
+			install_path=install_path, idx=bld.get_taskgen_count())

@@ -345,3 +345,14 @@ map transitions and all embedded buttons. Capture the startup log:
 If exact native DXT support exists, it deliberately bypasses ASTC even when on.
 Keep the previous working APK for rollback if companion ABI/context behavior
 on the device differs; do not equate a successful build with a verified launch.
+
+
+## Experimental native DXVK-Sarek / ZIP GPU drivers
+
+The ARM64 build now adds a separately selected native **DXVK-Sarek** backend and
+an owned same-UID GPU process; GLES remains the default and retains ASTC/controls.
+The launcher settings install/select trusted ARM64 driver ZIPs in private storage;
+Sarek loads the selected driver through **libadrenotools**, with explicit errors
+rather than a hidden system-driver fallback. System Vulkan is a separate choice.
+See [architecture, build pins, security and device-test caveats](DXVK_SAREK_ANDROID.md).
+Compilation/packaging checks do not prove rendering, pause/resume or FPS on a phone.

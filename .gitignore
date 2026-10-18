@@ -37,3 +37,7 @@ waf3*/
 .vscode/
 .depproj/
 source-engine.sln
+
+# Generated Sarek SDK/binary package; runtime libraries are staged into the APK by the build.
+/artifacts/dxvk-sarek-android-*/
+/artifacts/dxvk-sarek-android-*.tar.xz

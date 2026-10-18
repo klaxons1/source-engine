@@ -72,6 +72,22 @@ public final class UnderhellLaunchContract {
         return out.toString();
     }
 
+    public static String[] buildArgumentArray(String input) {
+        List<Token> parsed = tokens(buildArguments(input, false));
+        if (parsed.size() > 480) throw new IllegalArgumentException("Too many engine arguments");
+        ArrayList<String> result = new ArrayList<String>();
+        int length = 0;
+        for (Token token : parsed) {
+            length += token.value.length();
+            if (length > 32768 || token.value.length() > 4096 || token.value.indexOf('\0') >= 0)
+                throw new IllegalArgumentException("Engine arguments exceed the native launch limit");
+            result.add(token.value);
+        }
+        result.add("-nouserclip"); result.add("-fullscreen");
+        result.add("-nosteam"); result.add("-insecure");
+        return result.toArray(new String[result.size()]);
+    }
+
     public static void requireLibraries(String directory) throws IOException {
         if (directory == null || directory.length() == 0)
             throw new IOException("Android did not provide a native library directory");

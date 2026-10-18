@@ -17,10 +17,14 @@ def run():
         raise RuntimeError("A Java runtime/compiler is required for the launcher contract tests")
     compiler = [java, "-jar", compiler_jar] if compiler_jar else [javac]
     with tempfile.TemporaryDirectory(prefix="underhell-java-tests-") as tmp:
-        subprocess.run(compiler + ["-source", "8", "-target", "8", "-d", tmp,
+        classpath = ["-classpath", os.environ["JAVA_TEST_CLASSPATH"]] if os.environ.get("JAVA_TEST_CLASSPATH") else []
+        subprocess.run(compiler + classpath + ["-source", "8", "-target", "8", "-d", tmp,
             str(ROOT / "assets/android/java/me/nillerusr/UnderhellLaunchContract.java"),
-            str(ROOT / "scripts/tests/UnderhellLaunchContractTest.java")], check=True)
+            str(ROOT / "scripts/tests/UnderhellLaunchContractTest.java"),
+            str(ROOT / "assets/android/java/me/nillerusr/UnderhellDriverArchive.java"),
+            str(ROOT / "scripts/tests/UnderhellDriverArchiveTest.java")], check=True)
         subprocess.run([java, "-cp", tmp, "UnderhellLaunchContractTest"], check=True)
+        subprocess.run([java, "-cp", tmp, "UnderhellDriverArchiveTest"], check=True)
 
 
 if __name__ == "__main__":

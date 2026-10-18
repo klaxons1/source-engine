@@ -1765,6 +1765,11 @@ void CShaderDeviceDx8::SetPresentParameters( void* hWnd, int nAdapter, const Sha
 		m_PresentParameters.BackBufferCount = 1;
 	}
 
+#ifdef UNDERHELL_SAREK
+	// Android/SDL owns immersive fullscreen, not D3D exclusive mode switching.
+	m_PresentParameters.Windowed = TRUE;
+	m_PresentParameters.FullScreen_RefreshRateInHz = 0;
+#endif
 	if ( info.m_nAASamples > 0 && ( m_PresentParameters.SwapEffect == D3DSWAPEFFECT_DISCARD ) )
 	{
 		D3DMULTISAMPLE_TYPE multiSampleType = ComputeMultisampleType( info.m_nAASamples );

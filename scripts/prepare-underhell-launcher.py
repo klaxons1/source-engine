@@ -51,6 +51,23 @@ def prepare(launcher):
 ''', 1)
                 text = text.replace('editor.putString( "argv", argv );',
                     'editor.putString( "argv", argv );\n        editor.putBoolean("underhell_astc", underhellAstc.isChecked());', 1)
+        if name == "LauncherActivity" and "// Underhell GPU settings" not in text:
+            anchor = '\t\tLinearLayout body = ( LinearLayout ) findViewById( R.id.body );'
+            if anchor not in text:
+                raise ValueError("Launcher settings view contract changed")
+            text = text.replace(anchor, anchor + '''
+        // Underhell GPU settings: private ZIP install and explicit renderer selection.
+        android.widget.Button underhellGpu = new android.widget.Button(this);
+        underhellGpu.setText("Рендерер / Vulkan / GPU-драйверы ZIP…");
+        underhellGpu.setOnClickListener(v -> startActivity(new Intent(this, UnderhellVulkanSettingsActivity.class)));
+        body.addView(underhellGpu);
+''', 1)
+        if name == "ExtractAssets":
+            # Companion only needs directory traversal + read-only VPK access.
+            # Do NOT make our dataDir world-writable now that it contains GPU drivers.
+            text = text.replace('chmod( appinf.dataDir, 0777 )', 'chmod( appinf.dataDir, 0711 )')
+            text = text.replace('chmod( context.getFilesDir().getPath(), 0777 )', 'chmod( context.getFilesDir().getPath(), 0711 )')
+            text = text.replace(' + asset, 0777 )', ' + asset, 0644 )')
         if name == "ExtractAssets" and (android / "assets/extras_dir.vpk").is_file():
             digest = hashlib.sha256((android / "assets/extras_dir.vpk").read_bytes()).hexdigest()
             text, count = re.subn(r'(VPK_CHSM\s*=\s*)"[^"]*"', lambda m: m[1] + '"' + digest + '"', text)
@@ -61,8 +78,14 @@ def prepare(launcher):
                           '!VPK_CHSM.equals( mPref.getString( "vpk_checksum", "" ) )', text)
         changes[path] = text
 
-    helper = "java/me/nillerusr/UnderhellLaunchContract.java"
-    changes[android / "src/me/nillerusr/UnderhellLaunchContract.java"] = (ASSETS / helper).read_text(encoding="utf-8")
+    for helper in (ASSETS / "java").rglob("*.java"):
+        changes[android / "src" / helper.relative_to(ASSETS / "java")] = helper.read_text(encoding="utf-8")
+    sdl_java = ASSETS.parent.parent / "thirdparty/SDL-src/android-project/app/src/main/java"
+    if not (sdl_java / "org/libsdl/app/SDLActivity.java").is_file():
+        raise ValueError("Initialize the pinned thirdparty submodule for the owned SDL Java lifecycle")
+    for helper in sdl_java.rglob("*.java"):
+        changes[android / "src" / helper.relative_to(sdl_java)] = helper.read_text(encoding="utf-8")
+
 
     # Binary distributions retain the third-party notices as readable APK assets.
     for notice in (ASSETS / "licenses").glob("*.txt"):
@@ -79,6 +102,28 @@ def prepare(launcher):
     # The companion reads nativeLibraryDir, not zip entries inside this APK.
     text = re.sub(r' android:extractNativeLibs="[^"]*"', "", text)
     text = text.replace("<application ", '<application android:extractNativeLibs="true" ', 1)
+    # The template's unused exported base SDLActivity is not a valid engine entry
+    # point. Only our non-exported subclass may initialize the owned runtime.
+    text = re.sub(r'<activity\b[^>]*android:name="org\.libsdl\.app\.SDLActivity"[^>]*>.*?</activity>', '', text, flags=re.S)
+    if 'android:name="org.libsdl.app.SDLActivity"' in text:
+        raise ValueError("Unexpected template base SDL activity layout")
+    # Non-exported same-UID GPU process. Separate task keeps the launcher available
+    # if the Vulkan process crashes. singleTask never reinitializes a live SDL singleton.
+    if 'me.nillerusr.UnderhellSarekActivity' not in text:
+        activities = '''
+        <activity android:name="me.nillerusr.UnderhellVulkanSettingsActivity" android:exported="false" />
+        <activity android:name="me.nillerusr.UnderhellSarekActivity" android:exported="false"
+            android:process=":sarek" android:taskAffinity="com.valvesoftware.source.underhell.sarek"
+            android:launchMode="singleTask" android:screenOrientation="sensorLandscape"
+            android:configChanges="keyboard|keyboardHidden|orientation|screenSize|smallestScreenSize|uiMode"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen" android:hardwareAccelerated="true" />
+'''
+        if "</application>" in text:
+            text = text.replace("</application>", activities + "</application>", 1)
+        elif re.search(r'<application[^>]*?/>', text):
+            text = re.sub(r'(<application[^>]*?)/>', lambda m: m[1] + '>' + activities + '</application>', text, count=1)
+        else:
+            raise ValueError("Unexpected Android application layout")
     changes[path] = text
 
     path = android / "res/values/updates.xml"

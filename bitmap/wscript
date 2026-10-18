@@ -63,3 +63,10 @@ def build(bld):
 		idx      = bld.get_taskgen_count()
 	)
 
+
+	if bld.env.SAREK_SDK:
+		# TOGL's D3DFORMAT enum ordinals are NOT the real D3D9 values.
+		from scripts.sarek_waf import native_env, native_includes
+		bld.stlib(source=source, target='bitmap_sarek', name='bitmap_sarek',
+			env=native_env(bld), includes=includes + native_includes(bld),
+			features='c cxx', install_path=None, idx=bld.get_taskgen_count())

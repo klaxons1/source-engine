@@ -147,7 +147,11 @@ typedef int BOOL;
 #endif
 
 typedef int qboolean;
+#if defined(UNDERHELL_SAREK)
+typedef unsigned int ULONG; // Native D3D9 COM uses 32-bit Win32 ULONG on ARM64.
+#else
 typedef unsigned long ULONG;
+#endif
 typedef unsigned char BYTE;
 typedef unsigned char byte;
 typedef unsigned short word;

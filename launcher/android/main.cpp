@@ -129,10 +129,18 @@ DLL_EXPORT int LauncherMainAndroid( int argc, char **argv )
 	android_property_print("ro.product.model");
 	android_property_print("ro.product.name");
 
+#ifndef UNDERHELL_VULKAN_LAUNCHER
 	SetLauncherArgs();
+#endif
 
 	SDL_SetHint(SDL_HINT_TOUCH_MOUSE_EVENTS, "0");
 	DeclareCurrentThreadIsMainThread(); // Init thread propertly on Android
 
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	// SDL's JNI passes a bounded String[]; unlike the companion strtok path,
+	// this retains quoted arguments and has no fixed 512-element overflow.
+	return LauncherMain(argc, argv);
+#else
 	return LauncherMain(iLastArgs, LauncherArgv);
+#endif
 }

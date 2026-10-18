@@ -123,6 +123,8 @@ class LauncherTests(unittest.TestCase):
         for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
             shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
         shutil.copytree(ROOT / "assets", root / "assets")
+        sdl_java = Path("thirdparty/SDL-src/android-project/app/src/main/java")
+        shutil.copytree(ROOT / sdl_java, root / sdl_java)
         (root / "game/client/underhell").mkdir(parents=True)
         for name in ("uh_touch_assets.h", "uh_touch_controls.inl"):
             shutil.copy2(ROOT / "game/client/underhell" / name, root / "game/client/underhell" / name)

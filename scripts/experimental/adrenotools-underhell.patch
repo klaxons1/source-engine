@@ -1,0 +1,93 @@
+diff --git a/include/adrenotools/driver.h b/include/adrenotools/driver.h
+index f81e8fe34dae38dee68118e8f8af38c2552975f8..24f47ada2bcf1aa74daf53c3fc4a1bc4234da238 100644
+--- a/include/adrenotools/driver.h
++++ b/include/adrenotools/driver.h
+@@ -28,6 +28,10 @@ extern "C" {
+  * @param fileRedirectDir The directory which to redirect all file accesses performed by the driver to. Only used if ADRENOTOOLS_DRIVER_FILE_REDIRECT is set in `featureFlags`
+  * @param userMappingHandle A pointer to a void* which will be set to the mapping handle if ADRENOTOOLS_DRIVER_GPU_MAPPING_IMPORT is set in `featureFlags`
+  */
++/** Underhell extension: true only after the requested driver was opened by the hook.
++ * Query after vkCreateInstance / physical-device enumeration, not just dlopen. */
++bool adrenotools_underhell_custom_driver_loaded(void);
++
+ void *adrenotools_open_libvulkan(int dlopenMode, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle);
+ 
+ /**
+diff --git a/src/driver.cpp b/src/driver.cpp
+index 4ddee4aaa4050ef045949f398ddc006af3310f14..711060f3c089fb8b43c3f4662e70857c307e667d 100644
+--- a/src/driver.cpp
++++ b/src/driver.cpp
+@@ -16,6 +16,11 @@
+ #include <adrenotools/driver.h>
+ #include <unistd.h>
+ 
++static HookImplParams *underhell_params;
++bool adrenotools_underhell_custom_driver_loaded(void) {
++    return underhell_params && underhell_params->underhellCustomLoaded.load();
++}
++
+ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *tmpLibDir, const char *hookLibDir, const char *customDriverDir, const char *customDriverName, const char *fileRedirectDir, void **userMappingHandle) {
+     // Bail out if linkernsbypass failed to load, this probably means we're on api < 28
+     if (!linkernsbypass_load_status())
+@@ -84,7 +89,8 @@ void *adrenotools_open_libvulkan(int dlopenFlags, int featureFlags, const char *
+         }
+     }()};
+ 
+-    initHookParam(new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping));
++    underhell_params = new HookImplParams(featureFlags, tmpLibDir, hookLibDir, customDriverDir, customDriverName, fileRedirectDir, importMapping);
++    initHookParam(underhell_params);
+ 
+     // Load the libvulkan hook into the isolated namespace
+     if (!linkernsbypass_namespace_dlopen("libmain_hook.so", RTLD_GLOBAL, hookNs))
+diff --git a/src/hook/hook_impl.cpp b/src/hook/hook_impl.cpp
+index 50e79a946b80e5f9654798b65ba378f476d5faec..714cfe4e48ceca199593c5928cedf8d237f43147 100644
+--- a/src/hook/hook_impl.cpp
++++ b/src/hook/hook_impl.cpp
+@@ -37,6 +37,10 @@ __attribute__((visibility("default"))) void init_gsl(void *alloc, void *alloc64,
+ 
+ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char *filename, int flags, const android_dlextinfo *extinfo) {
+     auto fallback{[&]() {
++        if (hook_params && (hook_params->featureFlags & ADRENOTOOLS_DRIVER_CUSTOM)) {
++            LOGI("Underhell: selected custom driver failed; system fallback refused");
++            return static_cast<void *>(nullptr);
++        }
+         LOGI("hook_android_dlopen_ext: falling back!");
+         return android_dlopen_ext(filename, flags, extinfo);
+     }};
+@@ -47,7 +51,7 @@ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char
+     if (!strstr(filename, "vulkan."))
+         return android_dlopen_ext(filename, flags, extinfo);
+ 
+-    if (extinfo->library_namespace == nullptr || !(extinfo->flags & ANDROID_DLEXT_USE_NAMESPACE)) {
++    if (!extinfo || extinfo->library_namespace == nullptr || !(extinfo->flags & ANDROID_DLEXT_USE_NAMESPACE)) {
+         LOGI("hook_android_dlopen_ext: hook failed: namespace not supplied!");
+         return fallback();
+     }
+@@ -132,6 +136,7 @@ __attribute__((visibility("default"))) void *hook_android_dlopen_ext(const char
+             return fallback();
+         }
+ 
++        hook_params->underhellCustomLoaded.store(true);
+         return handle;
+     } else {
+         LOGI("hook_android_dlopen_ext: loading default driver: %s", filename);
+diff --git a/src/hook/hook_impl_params.h b/src/hook/hook_impl_params.h
+index 8a3bd1673e18912d34f976afcc61164faeb38e8f..cddf1c158daa7462eb2254ccb6af4e3a335efd66 100644
+--- a/src/hook/hook_impl_params.h
++++ b/src/hook/hook_impl_params.h
+@@ -4,6 +4,7 @@
+ #pragma once
+ 
+ #include <string>
++#include <atomic>
+ #include <adrenotools/priv.h>
+ 
+ /**
+@@ -11,6 +12,7 @@
+  * @note See comments for adrenotools_open_libvulkan as a reference for member variables
+  */
+ struct HookImplParams {
++    mutable std::atomic<bool> underhellCustomLoaded{false};
+     int featureFlags;
+     std::string tmpLibDir;
+     std::string hookLibDir;

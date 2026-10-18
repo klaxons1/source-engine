@@ -23,7 +23,9 @@
 //  THE SOFTWARE.
 //
 
-#ifdef TOGLES
+#if defined(UNDERHELL_SAREK)
+#include "sarek_native.h"
+#elif defined(TOGLES)
 #include "togles/rendermechanism.h"
 #else
 

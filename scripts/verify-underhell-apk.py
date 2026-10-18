@@ -32,6 +32,39 @@ def verify(apk, badging, staging=None):
             if not (staging / name).is_file() or name not in members or archive.read(name) != (staging / name).read_bytes():
                 raise ValueError("APK is missing/stale Underhell touch texture VPK")
             report["touch_vpk_sha256"] = hashlib.sha256(archive.read(name)).hexdigest()
+        native_manifest = "assets/underhell-vulkan.json"
+        sarek_name = "lib/arm64-v8a/libshaderapidx9_sarek.so"
+        if native_manifest in members or sarek_name in members:
+            if native_manifest not in members:
+                raise ValueError("Incomplete Vulkan APK: missing provenance/hash manifest")
+            runtime = json.loads(archive.read(native_manifest))
+            if runtime.get("sarek") != "0c0e8f6f62c7cb37dbf5d38413517efa00c08fef" or runtime.get("adrenotools") != "8fae8ce254dfc1344527e05301e43f37dea2df80":
+                raise ValueError("Unexpected Sarek/libadrenotools provenance")
+            hashes = runtime.get("libraries_sha256", {})
+            required_runtime = {"lib" + n + ".so" for n in ("SDL2", "hidapi", "dxvk_sarek_d3d9", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook")}
+            if set(hashes) != required_runtime:
+                raise ValueError("Incomplete Vulkan runtime manifest")
+            for module in sorted(required_runtime | {"libshaderapidx9_sarek.so", "liblauncher_sarek.so"}):
+                name = "lib/arm64-v8a/" + module
+                if name not in members:
+                    raise ValueError("Incomplete Vulkan APK: missing " + name)
+                data = archive.read(name)
+                if len(data) < 64 or data[:6] != b"\x7fELF\x02\x01" or int.from_bytes(data[18:20], "little") != 183:
+                    raise ValueError("Invalid Vulkan ARM64 library: " + name)
+                digest = hashlib.sha256(data).hexdigest()
+                if module in hashes and digest != hashes[module]:
+                    raise ValueError("Stale/replaced Vulkan runtime library: " + name)
+                if staging is not None and (not (staging / name).is_file() or hashlib.sha256((staging / name).read_bytes()).hexdigest() != digest):
+                    raise ValueError("Vulkan library differs from staged build: " + name)
+                marker = {"libshaderapidx9_sarek.so": b"UNDERHELL_SAREK_SHADERAPI_V1", "liblauncher_sarek.so": b"UNDERHELL_SAREK_LAUNCHER_V1"}.get(module)
+                if marker and marker not in data:
+                    raise ValueError("Wrong native Vulkan engine module: " + name)
+                report["libraries"][name] = digest
+            dex = b"".join(archive.read(n) for n in members if re.fullmatch(r"classes[0-9]*\.dex", n))
+            for klass in (b"Lme/nillerusr/UnderhellSarekActivity;", b"Lme/nillerusr/UnderhellVulkanSettingsActivity;", b"Lorg/libsdl/app/SDLActivity;"):
+                if klass not in dex:
+                    raise ValueError("Missing owned Vulkan Java lifecycle/settings class")
+            report["vulkan"] = "Packaged integration verified; Android execution/GPU tests still required"
         for module, marker in MARKERS.items():
             required = "lib/arm64-v8a/lib" + module + ".so"
             if required not in members:
