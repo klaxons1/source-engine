@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -28,6 +29,7 @@
 #include "vehicle_jeep.h"
 #include "eventqueue.h"
 #include "rumble_shared.h"
+#include "particle_parse.h"
 // NVNT haptic utils
 #include "haptics/haptic_utils.h"
 // memdbgon must be the last include file in a .cpp file!!!
@@ -42,8 +44,8 @@
 
 #define CANNON_MAX_UP_PITCH			20
 #define CANNON_MAX_DOWN_PITCH		20
-#define CANNON_MAX_LEFT_YAW			90
-#define CANNON_MAX_RIGHT_YAW		90
+#define CANNON_MAX_LEFT_YAW			200
+#define CANNON_MAX_RIGHT_YAW		200
 
 #define OVERTURNED_EXIT_WAITTIME	2.0f
 
@@ -136,6 +138,9 @@ BEGIN_DATADESC( CPropJeep )
 	DEFINE_INPUTFUNC( FIELD_VOID, "StartRemoveTauCannon", InputStartRemoveTauCannon ),
 	DEFINE_INPUTFUNC( FIELD_VOID, "FinishRemoveTauCannon", InputFinishRemoveTauCannon ),
 
+	// Underhell: mounted-gun (gunner seat) flag.
+	DEFINE_KEYFIELD( m_bEnableMountedGun, FIELD_BOOLEAN, "EnableMountedGun" ),
+
 	DEFINE_THINKFUNC( JeepSeagullThink ),
 END_DATADESC()
 
@@ -168,6 +173,7 @@ CPropJeep::CPropJeep( void )
 
 	m_bUnableToFire = true;
 	m_flAmmoCrateCloseTime = 0;
+	m_bEnableMountedGun = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -189,12 +195,14 @@ void CPropJeep::Precache( void )
 
 	PrecacheScriptSound( "PropJeep.AmmoClose" );
 	PrecacheScriptSound( "PropJeep.FireCannon" );
+	PrecacheScriptSound( "FuncTank.Fire" );
 	PrecacheScriptSound( "PropJeep.FireChargedCannon" );
 	PrecacheScriptSound( "PropJeep.AmmoOpen" );
 
 	PrecacheScriptSound( "Jeep.GaussCharge" );
 
 	PrecacheModel( GAUSS_BEAM_SPRITE );
+	PrecacheParticleSystem( "muzzle_star_uh" );
 
 	BaseClass::Precache();
 }
@@ -262,6 +270,14 @@ void CPropJeep::Activate()
 //-----------------------------------------------------------------------------
 void CPropJeep::DoImpactEffect( trace_t &tr, int nDamageType )
 {
+	// Mounted Underhell gun uses the ordinary AR2 tracer/impact path. The
+	// Gauss beam and explosion below belong only to the stock tau cannon.
+	if ( m_bEnableMountedGun )
+	{
+		BaseClass::DoImpactEffect( tr, nDamageType );
+		return;
+	}
+
 	//Draw our beam
 	DrawBeam( tr.startpos, tr.endpos, 2.4 );
 
@@ -359,7 +375,7 @@ Vector CPropJeep::BodyTarget( const Vector &posSrc, bool bNoisy )
 	Vector	shotPos;
 	matrix3x4_t	matrix;
 
-	int eyeAttachmentIndex = LookupAttachment("vehicle_driver_eyes");
+	int eyeAttachmentIndex = LookupAttachment( m_bPlayerAtGun ? "vehicle_gunner_eyes" : "vehicle_driver_eyes" );
 	GetAttachment( eyeAttachmentIndex, matrix );
 	MatrixGetColumn( matrix, 3, shotPos );
 
@@ -380,8 +396,9 @@ void CPropJeep::AimGunAt( Vector *endPos, float flInterval )
 {
 	Vector	aimPos = *endPos;
 
-	// See if the gun should be allowed to aim
-	if ( IsOverturned() || m_bEngineLocked || m_bHasGun == false )
+	// A mounted gun only tracks the player in gunner mode. Before the map's
+	// ToggleGunMode input it stays centered, matching sub_103EBB80.
+	if ( ( m_bEnableMountedGun && !m_bPlayerAtGun ) || IsOverturned() || m_bEngineLocked || m_bHasGun == false )
 	{
 		SetPoseParameter( JEEP_GUN_YAW, 0 );
 		SetPoseParameter( JEEP_GUN_PITCH, 0 );
@@ -395,7 +412,10 @@ void CPropJeep::AimGunAt( Vector *endPos, float flInterval )
 	}
 
 	matrix3x4_t gunMatrix;
-	GetAttachment( LookupAttachment("gun_ref"), gunMatrix );
+	// Underhell's inaki jeep is authored around the muzzle attachment. The
+	// stock HL2 gun_ref basis is absent/rotated on this model and makes the
+	// mounted gun roll sideways as soon as the player enters.
+	GetAttachment( LookupAttachment("muzzle"), gunMatrix );
 
 	// transform the enemy into gun space
 	Vector localEnemyPosition;
@@ -732,8 +752,10 @@ void CPropJeep::Think( void )
 		SetPoseParameter( JEEP_GUN_SPIN, m_nSpinPos );
 	}
 
-	// Aim gun based on the player view direction.
-	if ( m_bHasGun && m_hPlayer && !m_bExitAnimOn && !m_bEnterAnimOn )
+	// Aim gun based on the player view direction. For an authored mounted gun,
+	// sub_103EC540 only tracks while ToggleGunMode is active.
+	if ( m_bHasGun && ( !m_bEnableMountedGun || m_bPlayerAtGun ) &&
+		m_hPlayer && !m_bExitAnimOn && !m_bEnterAnimOn )
 	{
 		Vector vecEyeDir, vecEyePos;
 		m_hPlayer->EyePositionAndVectors( &vecEyePos, &vecEyeDir, NULL, NULL );
@@ -898,22 +920,24 @@ void CPropJeep::FireCannon( void )
 	if ( m_bUnableToFire )
 		return;
 
-	m_flCannonTime = gpGlobals->curtime + 0.2f;
+	if ( m_bEnableMountedGun && !m_bPlayerAtGun )
+		return;
+
+	// Underhell's mounted-gun path keeps jeep ammo/damage handling. AR2 is
+	// selected by its tracer/impact branch, not by replacing the ammo type.
+	m_flCannonTime = gpGlobals->curtime + 0.1f;
 	m_bCannonCharging = false;
+	DispatchParticleEffect( "muzzle_star_uh", PATTACH_POINT_FOLLOW, this, "muzzle_uh" );
 
-	//Find the direction the gun is pointing in
 	Vector aimDir;
-	GetCannonAim( &aimDir );
-
-#if defined( WIN32 ) && !defined( _X360 ) 
-	// NVNT apply a punch on fire
-	HapticPunch(m_hPlayer,0,0,hap_jeep_cannon_mag.GetFloat());
-#endif
-	FireBulletsInfo_t info( 1, m_vecGunOrigin, aimDir, VECTOR_CONE_1DEGREES, MAX_TRACE_LENGTH, m_nAmmoType );
-
+	QAngle muzzleAngles;
+	GetAttachment( "muzzle", m_vecGunOrigin, muzzleAngles );
+	AngleVectors( muzzleAngles, &aimDir );
+	FireBulletsInfo_t info( 1, m_vecGunOrigin, aimDir, Vector( 0.0087299999f, 0.0087299999f, 0.0087299999f ),
+		MAX_TRACE_LENGTH, m_nAmmoType );
+	info.m_flDamage = sk_jeep_gauss_damage.GetInt();
 	info.m_nFlags = FIRE_BULLETS_ALLOW_WATER_SURFACE_IMPACTS;
 	info.m_pAttacker = m_hPlayer;
-
 	FireBullets( info );
 
 	// Register a muzzleflash for the AI
@@ -923,8 +947,9 @@ void CPropJeep::FireCannon( void )
 		m_hPlayer->RumbleEffect( RUMBLE_PISTOL, 0, RUMBLE_FLAG_RESTART	);
 	}
 
-	CPASAttenuationFilter sndFilter( this, "PropJeep.FireCannon" );
-	EmitSound( sndFilter, entindex(), "PropJeep.FireCannon" );
+	const char *pszFireSound = m_bEnableMountedGun ? "FuncTank.Fire" : "PropJeep.FireCannon";
+	CPASAttenuationFilter sndFilter( this, pszFireSound );
+	EmitSound( sndFilter, entindex(), pszFireSound );
 	
 	// make cylinders of gun spin a bit
 	m_nSpinPos += JEEP_GUN_SPIN_RATE;
@@ -1126,7 +1151,7 @@ void CPropJeep::GetCannonAim( Vector *resultDir )
 	Vector	muzzleOrigin;
 	QAngle	muzzleAngles;
 
-	GetAttachment( LookupAttachment("gun_ref"), muzzleOrigin, muzzleAngles );
+	GetAttachment( LookupAttachment("muzzle"), muzzleOrigin, muzzleAngles );
 
 	AngleVectors( muzzleAngles, resultDir );
 }
@@ -1458,6 +1483,8 @@ void CPropJeep::EnterVehicle( CBaseCombatCharacter *pPassenger )
 	if ( !pPlayer )
 		return;
 
+	// Gunner mode is map-controlled through ToggleGunMode. The chapter map
+	// toggles it when Bryan enters the authored visual driver seat.
 	CheckWater();
 	BaseClass::EnterVehicle( pPassenger );
 

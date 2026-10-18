@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:
 //
@@ -92,6 +93,7 @@ BEGIN_DATADESC( CNPC_PlayerCompanion )
 
 	DEFINE_INPUTFUNC( FIELD_STRING,	"EnterVehicle",				InputEnterVehicle ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "EnterVehicleImmediately",	InputEnterVehicleImmediately ),
+	DEFINE_INPUTFUNC( FIELD_STRING, "EnterVehicleImmediatelyAsDriver", InputEnterVehicleImmediatelyAsDriver ),
 	DEFINE_INPUTFUNC( FIELD_VOID,	"ExitVehicle",				InputExitVehicle ),
 	DEFINE_INPUTFUNC( FIELD_VOID,	"CancelEnterVehicle",		InputCancelEnterVehicle ),
 #endif	// HL2_EPISODIC
@@ -3343,6 +3345,19 @@ void CNPC_PlayerCompanion::InputEnterVehicleImmediately( inputdata_t &inputdata 
 {
 	CBaseEntity *pEntity = FindNamedEntity( inputdata.value.String() );
 	EnterVehicle( pEntity, true );
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Put the companion in the authored driver animation immediately.
+// Chapter1_16 drives the jeep explicitly with Throttle/Steer/HandBrake map
+// inputs; creating an npc_vehicledriver here fights those inputs every frame.
+//-----------------------------------------------------------------------------
+void CNPC_PlayerCompanion::InputEnterVehicleImmediatelyAsDriver( inputdata_t &inputdata )
+{
+	CBaseEntity *pVehicle = FindNamedEntity( inputdata.value.String() );
+	if ( !pVehicle || !pVehicle->GetServerVehicle() )
+		return;
+	EnterVehicle( pVehicle, true );
 }
 
 //-----------------------------------------------------------------------------

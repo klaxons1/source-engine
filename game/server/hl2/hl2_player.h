@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose:		Player for HL2.
 //
@@ -14,6 +15,9 @@
 #include "hl2_playerlocaldata.h"
 #include "simtimer.h"
 #include "soundenvelope.h"
+#include "underhell/uh_inventory.h"
+
+class CCommand;
 
 class CAI_Squad;
 class CPropCombineBall;
@@ -239,6 +243,8 @@ public:
 	// physics interactions
 	virtual void		PickupObject( CBaseEntity *pObject, bool bLimitMassAndSize );
 	virtual	bool		IsHoldingEntity( CBaseEntity *pEnt );
+	void				UH_BeginCarryRagdoll( CBaseEntity *pRagdoll );
+	void				UH_UpdateCarryRagdollWeight( void );
 	virtual void		ForceDropOfCarriedPhysObjects( CBaseEntity *pOnlyIfHoldindThis );
 	virtual float		GetHeldObjectMass( IPhysicsObject *pHeldObject );
 
@@ -294,12 +300,310 @@ protected:
 	virtual void		ItemPostFrame();
 	virtual void		PlayUseDenySound();
 
+public:
+	//-----------------------------------------------------------------------------
+	// Underhell inventory (implementation in game/server/underhell/uh_player_inventory.cpp).
+	// NOTE: UH_ItemAction is the first virtual Underhell added to the stock
+	// CHL2_Player vtable (index 411 in the original binary) — keep it the last
+	// virtual in this class for vtable parity.
+	//-----------------------------------------------------------------------------
+	virtual bool		UH_ItemAction( int iSlot, bool bUse );
+
+	void				UH_SpawnItemInWorld( int iItem );
+	void				UH_InitializeInventory( void );
+	void				UH_AddInventoryItem( int iItem );
+	void				UH_RemoveInventoryItem( int iSlot );
+	int					UH_FindInventoryItem( int iItem ) const;
+	int					UH_FindFreeSlot( void ) const;		// 0-based slot, -1 when full
+	void				UH_GiveItem( int iItem );			// vtable [410]: add, or drop to world when full
+	bool				UH_HandleInventoryCommand( const CCommand &args );	// dispatch: switch/dropitem/useitem
+	void				UH_UpdateInventory( void );			// "UpdateInventory" server handler
+
+	//-----------------------------------------------------------------------------
+	// Underhell endurance / hunger system (implementation in
+	// game/server/underhell/uh_player_endurance.cpp).
+	//
+	// Original model (hexrays): the red HUD bar is suit power (m_HL2Local.
+	// m_flSuitPower) — the vanilla sprint "stamina". The green bar is
+	// m_iEndurance (the "hunger" meter, 0..100): eating/drinking restores it,
+	// and it is consumed as stamina recharges. Lower endurance = slower
+	// stamina recharge (sub_102E0E60).
+	//-----------------------------------------------------------------------------
+	void				UH_InitializeEndurance( void );
+	bool				UH_Eat( float flEndurance, float flHealth, const char *pszEatSound );
+	bool				UH_Drink( float flEndurance, float flHealth, int iFlavor );
+	void				UH_UpdateEndurance( void );	// endurance-gated suit power recharge
+	int					UH_GetEndurance( void ) const { return m_iEndurance; }
+	void				UH_SetEndurance( int iEndurance ) { m_iEndurance = iEndurance; }
+	int					UH_GetBleedCounter( void ) const { return m_iBleedCounter; }
+	void				UH_SetBleedCounter( int iBleedCounter ) { m_iBleedCounter = iBleedCounter; }
+	void				UH_SetLastBleedTime( float flTime ) { m_flLastBleedTime = flTime; }
+
+	// Bleeding: starts when the player takes damage (uh_bleeding_chance % per
+	// hit), drains health over time, and decays hunger (endurance). Decoded
+	// from the original PostThink (sub_101EF960).
+	void				UH_StartBleeding( float flDamage );
+	void				UH_UpdateBleeding( void );
+
+	//-----------------------------------------------------------------------------
+	// Underhell hermit-cards quest state. The counters are networked and drawn
+	// by CHudUHHermitCards. InputDisplayHermitCards refreshes them from the
+	// persistent GC_HermitCards / GC_HermitQuest_Total / GC_HermitQuest_Current
+	// env_global counters, matching sub_102E1B60.
+	//-----------------------------------------------------------------------------
+	void				UH_SetHermitCards( int iCards, int iQuestCurrent, int iQuestTotal )
+	{
+		m_iUHHermitCardsCount = iCards;
+		m_iUHHermitCurrentQuestCount = iQuestCurrent;
+		m_iUHHermitTotalQuestCount = iQuestTotal;
+
+		// First card collected -> show the deck icon.
+		if ( iCards > 0 )
+		{
+			m_bDisplayHermitCard = true;
+		}
+	}
+
+	int					UH_GetHermitCardsCount( void ) const { return m_iUHHermitCardsCount; }
+
+	//-----------------------------------------------------------------------------
+	// Underhell flashlight battery state. The flashlight runs on discrete
+	// batteries (m_iUHBatteryCount) rather than suit power.
+	//-----------------------------------------------------------------------------
+	int					UH_GetBatteryCount( void ) const { return m_iUHBatteryCount; }
+	void				UH_AddBattery( int iCount )
+	{
+		const bool bWasEmpty = ( m_iUHBatteryCount <= 0 );
+		m_iUHBatteryCount = clamp( m_iUHBatteryCount + iCount, 0, 20 );
+		if ( bWasEmpty && m_iUHBatteryCount > 0 )
+		{
+			m_HL2Local.m_flFlashBattery = 100.0f;
+			m_flUHBatteryCharge = 100.0f;
+		}
+	}
+	void				UH_UpdateFlashlightBattery( void );	// drain a battery while the flashlight is on
+
+	// Underhell gear ownership accessors (the fields themselves are private;
+	// item pickups route through these). Night-vision / gas-mask usage is still
+	// TODO, but the pickups set ownership so they work end-to-end.
+	bool				UH_HasNightVision( void ) const { return m_bHaveNightVision; }
+	void				UH_SetHaveNightVision( bool bHave ) { m_bHaveNightVision = bHave; }
+	bool				UH_HasGasMask( void ) const { return m_bHaveGasMask; }
+	void				UH_SetHaveGasMask( bool bHave ) { m_bHaveGasMask = bHave; }
+	bool				UH_IsGasMaskOn( void ) const { return m_bGasMaskOn; }
+	bool				UH_IsNightVisionOn( void ) const { return m_bNightVisionOn; }
+	void				UH_SetShoulderFlashlight( bool bHave ) { m_bShoulderFlashlight = bHave; }
+	void				UH_SetFlashlightOn( bool bOn ) { m_bFlashlightOn = bOn; }
+	bool				UH_IsLaserOn( void ) const { return m_bLaserToggleState; }
+	void				UH_SetLaserOn( bool bOn ) { m_bLaserToggleState = bOn; }
+
+	//-----------------------------------------------------------------------------
+	// Underhell ironsight. The "ironsight_toggle" client command toggles
+	// m_bIronSighted (networked so accuracy/FOV follow) and the viewmodel's
+	// m_bExpSighted (networked so the client slides the gun to the eye);
+	// m_fIronsightedTime is the last toggle time (debounce). Decoded from
+	// sub_101ECF40.
+	//-----------------------------------------------------------------------------
+	bool				UH_IsIronSighted( void ) const { return m_bIronSighted; }
+	bool				UH_IsWeaponObstructed( void ) const { return m_bUHWeaponObstructed; }
+	void				UH_UpdateWeaponObstruction( void );
+	void				UH_ToggleIronsight( void );
+	void				UH_DisableIronsight( void );	// force off (no debounce/sound) — weapon switch / drop
+
+	// Underhell gear toggles (client commands, decode sub_101F11D0).
+	void				UH_ToggleSilencer( void );
+	void				UH_ToggleLaser( void );
+	void				UH_DropWeapon( void );		// "DropWeapon" — throw the active weapon
+
+	// Underhell second hand / left arm (viewmodel index 1). Holds the
+	// flashlight (one-handed weapons), a flare, or a grenade being thrown.
+	// Decoded from sub_101ED130 (Throw_Nade) / sub_101EE050 (FlashLightContext)
+	// / sub_101F0C60 (flashlight deploy) / sub_101E9580 (flare throw).
+	void				UH_ThrowNade( void );		// "Throw_Nade" — staged throw (grenade or flare)
+	void				UH_LeftArmContextThink( void );	// the delayed grenade throw
+	void				UH_FlashlightViewModelThink( void );	// finish flashlight holster anim
+	void				UH_ThrowFlare( void );		// throw the held flare
+	void				UH_StartFlareStrike( void );	// primary attack with held flare
+	void				UH_FlareHitContextThink( void );
+	void				UH_UpdateLeftArm( void );	// sync left-arm viewmodel with weapon + flashlight
+	void				UH_EquipFlare( void );		// put a flare in the left hand (flare pack use)
+	void				UH_HolsterLeftArm( void );	// put the left arm away (weapon switch / drop)
+	void				UH_SetLeftArmModel( const char *pszModel, int nSkin, bool bDeployed );
+	CBaseCombatWeapon	*UH_FindOneHandedWeapon( void );	// left-arm-free weapon for the flashlight (sub_101E60C0)
+
+	// Underhell flashlight viewmodel in the left hand. Raised while the
+	// flashlight is on and a one-handed weapon is active.
+	bool				UH_IsFlashlightInLeftArm( void ) const { return !m_bShoulderFlashlight; }
+
+	// Underhell night vision + gas mask toggles (client commands
+	// "NightVision_Toggle" -> vtable 404 = sub_102E19B0, "GasMask_Toggle" ->
+	// sub_101ED380). Both are mutually exclusive and gated on ownership +
+	// an enabled flag; night vision additionally drains flashlight batteries.
+	void				UH_ToggleNightVision( void );
+	void				UH_ToggleGasMask( void );
+	void				UH_StopGasMaskBreath( void );	// kill the breath loop (death/reset)
+
+	// Underhell gear inputs (give the pistol / rifle silencer / night vision /
+	// gas mask; disable drop). SetNightVision / SetGasMask grant-take the gear
+	// (sub_101E36C0 / sub_101E3750 set m_bHaveNightVision / m_bHaveGasMask).
+	void				InputSetPistolSilencer( inputdata_t &inputdata );
+	void				InputSetRifleSilencer( inputdata_t &inputdata );
+	void				InputSetNightVision( inputdata_t &inputdata );
+	void				InputSetGasMask( inputdata_t &inputdata );
+	void				InputDisableDropWeapon( inputdata_t &inputdata );
+	void				InputEnableDropWeapon( inputdata_t &inputdata );
+
+	// Underhell player model / skin / viewmodel skin inputs (decode sub_101F2D30).
+	// SetPlayerModel also flags the model mirror-only so it renders in
+	// func_reflective_glass instead of the first-person world view.
+	void				InputSetPlayerModel( inputdata_t &inputdata );
+	void				InputSetPlayerSkin( inputdata_t &inputdata );
+	void				InputViewModelSkin( inputdata_t &inputdata );
+	void				InputSetPlayerKickModel( inputdata_t &inputdata );
+
+	// Map-facing Underhell player state inputs used throughout Chapter 1.
+	void				InputBleedPlayer( inputdata_t &inputdata );
+	void				InputDisableInventory( inputdata_t &inputdata );
+	void				InputEnableInventory( inputdata_t &inputdata );
+	void				InputDisplayHermitCards( inputdata_t &inputdata );
+	void				InputRemoveEndurance( inputdata_t &inputdata );
+	void				InputRemoveLitGlowstick( inputdata_t &inputdata );
+	void				InputSetStatusVisibility( inputdata_t &inputdata );
+	void				UH_UpdateLookGlow( void );
+
+	// Underhell "give" inputs (fired at !player from the maps). "Give" mirrors
+	// the vanilla "give" ConCommand (item_suit is special-cased); "GiveInv"
+	// hands a weapon/item to the player's arsenal. Both take the entity
+	// classname as the parameter (e.g. weapon_bfg_minigun, item_heavyarmor).
+	void				InputGive( inputdata_t &inputdata );
+	void				InputGiveInv( inputdata_t &inputdata );
+
+	// Underhell kick attack ("uh_jake_kick"). See uh_kick.cpp.
+	void				UH_Kick( void );
+	void				UH_KickThink( void );
+	void				UH_DoKickStrike( void );
+	bool				UH_CanKick( void );
+	void				InputDisableKick( inputdata_t &inputdata );
+	void				InputEnableKick( inputdata_t &inputdata );
+	void				InputEnableBt( inputdata_t &inputdata );
+	void				InputDisableBt( inputdata_t &inputdata );
+	void				UH_EndBulletTimeThink( void );
+	void				UH_SetKickViewModel( const char *pszModel );	// set + precache viewmodel 2
+
+	//-----------------------------------------------------------------------------
+	// Underhell glowstick. The lit glowstick prop is parented to the player and
+	// tracked here (original m_hActiveGlowStick @2164) so it can be removed when
+	// the player uses the lit-glowstick inventory slot again.
+	//-----------------------------------------------------------------------------
+	CBaseEntity			*UH_GetActiveGlowStick( void ) const { return m_hActiveGlowStick.Get(); }
+	void				UH_SetActiveGlowStick( CBaseEntity *pGlowStick ) { m_hActiveGlowStick.Set( pGlowStick ); }
+	CBaseEntity			*UH_GetActiveGlowStickLight( void ) const { return m_hActiveGlowStickLight.Get(); }
+	void				UH_SetActiveGlowStickLight( CBaseEntity *pLight ) { m_hActiveGlowStickLight.Set( pLight ); }
+
+	//-----------------------------------------------------------------------------
+	// Underhell objectives / map signaling (implementation in
+	// game/server/underhell/uh_player_objectives.cpp).
+	// Original: CBasePlayer::ClientCommand sub_101F11D0 in serveror.dll
+	// handles DispObj, GiveSign, SkipScene via gEntList.FindEntityByName
+	// + CLogicRelay::InputTrigger.
+	// Separated out for code quality / portability — inventory file stays
+	// pure inventory.
+	//-----------------------------------------------------------------------------
+	bool				UH_HandleObjectiveCommand( const CCommand &args );
+	void				UH_DisplayObjective( void );
+	void				UH_TriggerMapEntity( const char *pszTargetName );
+
 private:
 	bool				CommanderExecuteOne( CAI_BaseNPC *pNpc, const commandgoal_t &goal, CAI_BaseNPC **Allies, int numAllies );
 
 	void				OnSquadMemberKilled( inputdata_t &data );
 
 	Class_T				m_nControlClass;			// Class when player is controlling another entity
+
+	//-----------------------------------------------------------------------------
+	// Underhell inventory state. Declaration order mirrors the original binary
+	// layout (m_iInventory @4928, m_bShoulderFlashlight @5040, four ints, then
+	// the three bools). Do not reorder.
+	//-----------------------------------------------------------------------------
+	CNetworkArray( int, m_iInventory, UH_INVENTORY_SLOTS );	// item ids, 0 = empty slot
+	CNetworkVar( bool, m_bShoulderFlashlight );					// shoulder-mounted flashlight fitted
+	CNetworkVar( int, m_iUHBatteryCount );						// battery items held
+	CNetworkVar( int, m_iUHHermitCardsCount );
+	CNetworkVar( int, m_iUHHermitCurrentQuestCount );
+	CNetworkVar( int, m_iUHHermitTotalQuestCount );
+	CNetworkVar( bool, m_bDisplayHermitCard );
+	CNetworkVar( bool, m_bFlashlightOn );					// inventory flashlight state
+	CNetworkVar( bool, m_bInventoryEnabled );				// inventory system enabled
+
+	//-----------------------------------------------------------------------------
+	// Underhell endurance / hunger state (networked so the client HUD can draw
+	// the green endurance bar). Original layout: m_iEndurance @2184,
+	// m_iBleedCounter @2188 on CBasePlayer — kept in CHL2_Player here for
+	// consistency with the rest of the port (field names still match the
+	// original save format).
+	//-----------------------------------------------------------------------------
+	CNetworkVar( int, m_iEndurance );	// "hunger" meter, 0..100. Restored by eating.
+	CNetworkVar( int, m_iBleedCounter );	// bleeding state (0 = clean, >0 = bleeding).
+	CNetworkVar( float, m_flUHBatteryCharge );	// 0..100 charge of the current flashlight battery
+	CNetworkVar( bool, m_bIronSighted );		// ironsight active (accuracy + FOV zoom)
+	bool				m_bUHWeaponObstructed;	// automatic near-wall lowered pose
+	CNetworkVar( float, m_fIronsightedTime );	// last ironsight toggle time
+
+	// Underhell gear (original CBasePlayer members: m_bHavePistolSilencer @3371,
+	// m_bHaveRifleSilencer @3372, m_bLaserToggleState — networked for the HUD /
+	// client laser). Silencer ownership gates "silencer_toggle" for pistols and
+	// rifles; the laser toggle drives the client laser-sight beam.
+	CNetworkVar( bool, m_bHavePistolSilencer );
+	CNetworkVar( bool, m_bHaveRifleSilencer );
+	CNetworkVar( bool, m_bLaserToggleState );
+
+	// Underhell gear ownership (original CBasePlayer members m_bHaveNightVision
+	// @2138 / m_bHaveGasMask @2139). "On" state is networked (m_bNightVisionOn
+	// @3369 / m_bGasMaskOn @3370) so the client draws the overlay; the enabled
+	// flags (m_bNightVisionEnabled @2140 / m_bGasMaskEnabled @2141, default on)
+	// are the map-side gear gate.
+	bool				m_bHaveNightVision;
+	bool				m_bHaveGasMask;
+	CNetworkVar( bool, m_bNightVisionOn );	// night vision overlay active
+	CNetworkVar( bool, m_bGasMaskOn );		// gas mask overlay active
+	bool				m_bNightVisionEnabled;	// map allows night vision use
+	bool				m_bGasMaskEnabled;		// map allows gas mask use
+	CSoundPatch			*m_pGasMaskBreathLoop;	// looping breath sound while masked
+
+	// Underhell second hand / left arm (viewmodel index 1). m_bLeftArmDeployed
+	// @2121 and m_bHoldingFlare @2122 are networked (client mirrors them for
+	// prediction); the rest is server-local (matches the original binary).
+	CNetworkVar( bool, m_bLeftArmDeployed );	// left arm raised
+	CNetworkVar( bool, m_bHoldingFlare );		// holding a flare (throws flare, not grenade)
+	float				m_flFlareStartTime;		// total 90 s burn starts when equipped
+	EHANDLE				m_hHeldFlareEffect;		// env_flare parented to viewmodel fuse
+	EHANDLE				m_hHeldFlareSprite;		// visible fuse sprite parented to viewmodel fuse
+	bool				m_bFlareMarker;			// grenade throw anim in progress
+	bool				m_bFlareStrikePending;	// delayed melee impact
+	float				m_flNextFlareStrike;
+	bool				m_bFlashlightHolstered;	// flashlight holstered in the left hand
+
+	// Server-only runtime accumulators (mirror the original binary's members;
+	// not networked, saved for parity).
+	float				m_flPseudoEndurance;	// accumulated endurance drain (0.2 - hp*0.000875)/sec
+	float				m_flPseudoHealth;		// accumulated bleed damage before applying 1 hp
+	float				m_fEStaminaCount;		// stamina charge accumulator: -1 endurance per 50
+	float				m_flLastBleedTime;		// curtime of the last bleed think
+	float				m_flLastBleedTickBase;	// curtime of the previous think (dt accumulator base)
+	int					m_iEHealthCount;		// consecutive bleed-deaths (zeroes endurance at 10)
+	EHANDLE				m_hActiveGlowStick;		// lit glowstick prop parented to the player (original @2164)
+	EHANDLE				m_hActiveGlowStickLight;	// stable coloured env_flare child
+	EHANDLE				m_hUHLookGlowTarget;		// temporary center-camera outline target
+	float				m_flNextUHLookGlowTime;
+	EHANDLE				m_hCarryingRagdoll;		// original m_pCarryingRagdoll @2180
+	float				m_fSavedSensitivity;
+	Vector				m_vecUHFreeAimTarget;	// update_freeaim world target (original player floats @526..528)
+	bool				m_bBulletTimeDisabled;	// original player+2120; inputs gate impulse 110
+
+	// Underhell: block the "DropWeapon" command (set by the map via
+	// InputDisableDropWeapon / InputEnableDropWeapon; original m_bDisableWeaponDrop @2136).
+	bool				m_bDisableWeaponDrop;
+
 	// This player's HL2 specific data that should only be replicated to 
 	//  the player and not to other players.
 	CNetworkVarEmbedded( CHL2PlayerLocalData, m_HL2Local );
@@ -333,8 +637,20 @@ private:
 	float				m_flSuitPowerLoad;	// net suit power drain (total of all device's drainrates)
 	float				m_flAdmireGlovesAnimTime;
 
+	// Underhell: kick-attack viewmodel set via "SetPlayerKickModel"
+	// (models/weapons/v_kick_jake_*.mdl).
+	string_t			m_iszKickViewModel;
+
+	// Underhell kick (uh_jake_kick) state. m_bKickMarker is networked so the
+	// kick window is visible to the client; the rest is server-only.
+	CNetworkVar( bool, m_bKickMarker );	// kick in progress (viewmodel raised/striking)
+	bool				m_bKickActive;		// armed: don't re-trigger while kicking
+	bool				m_bKickDisabled;	// "DisableKick" / "EnableKick"
+	COutputEvent		m_OnDisabledKickAttempted;
+
 	float				m_flNextFlashlightCheckTime;
 	float				m_flFlashlightPowerDrainScale;
+	float				m_flNextFlashlightBatteryTime;	// next time the flashlight drains a battery
 
 	// Aiming heuristics code
 	float				m_flIdleTime;		//Amount of time we've been motionless

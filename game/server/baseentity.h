@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -643,6 +644,8 @@ public:
 	void InputAlternativeSorting( inputdata_t &inputdata );
 	void InputAlpha( inputdata_t &inputdata );
 	void InputColor( inputdata_t &inputdata );
+	void InputGlow( inputdata_t &inputdata );
+	void InputSetGlowColor( inputdata_t &inputdata );
 	void InputSetParent( inputdata_t &inputdata );
 	void SetParentAttachment( const char *szInputName, const char *szAttachment, bool bMaintainOffset );
 	void InputSetParentAttachment( inputdata_t &inputdata );
@@ -1729,12 +1732,35 @@ private:
 	CNetworkVar( bool, m_bSimulatedEveryTick );
 	CNetworkVar( bool, m_bAnimatedEveryTick );
 	CNetworkVar( bool, m_bAlternateSorting );
+	// Underhell: render this entity ONLY in mirror/monitor render targets
+	// (keyvalue "uh_rendermirrorsonly"). Used for the player model and ghost
+	// apparitions so they show up in func_reflective_glass but not the world.
+	CNetworkVar( bool, m_bIsMirrorOnly );
+
+public:
+	// Underhell: set the mirror-only rendering flag (CHL2_Player::SetPlayerModel).
+	void	SetMirrorOnly( bool bMirrorOnly ) { m_bIsMirrorOnly = bMirrorOnly; }
+	bool	IsMirrorOnly( void ) const { return m_bIsMirrorOnly; }
+
+	// Underhell: fire the "OnKicked" output (player kick hit this entity).
+	void	FireOnKicked( CBaseEntity *pActivator ) { m_OnKicked.FireOutput( pActivator, pActivator ); }
+	bool	IsUHKickableDoor( void ) const { return m_bUHKickableDoor; }
+	bool	IsUHHardGlow( void ) const { return m_bHardGlow; }
+	void	SetUHAutomaticGlow( bool enabled ) { if ( !m_bHardGlow ) m_bGlow = enabled; }
+private:
 
 	// User outputs. Fired when the "FireInputX" input is triggered.
 	COutputEvent m_OnUser1;
 	COutputEvent m_OnUser2;
 	COutputEvent m_OnUser3;
 	COutputEvent m_OnUser4;
+
+	// Underhell: fired when the player kicks this entity (uh_jake_kick).
+	COutputEvent m_OnKicked;
+	bool m_bUHKickableDoor;
+	CNetworkVar( bool, m_bGlow );
+	bool m_bHardGlow;
+	CNetworkColor32( m_GlowColor );
 
 	QAngle			m_angAbsRotation;
 

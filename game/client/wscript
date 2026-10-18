@@ -12,6 +12,7 @@ def options(opt):
 	return
 
 games = {
+	'underhell': ['client_base.vpc', 'client_underhell.vpc'],
 	'hl2': ['client_base.vpc', 'client_hl2.vpc'],
 	'hl2mp': ['client_base.vpc', 'client_hl2mp.vpc'],
 	'hl1': ['client_base.vpc', 'client_hl1.vpc'],

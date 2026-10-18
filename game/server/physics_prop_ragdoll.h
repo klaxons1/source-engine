@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -28,6 +29,7 @@ public:
 	~CRagdollProp( void );
 
 	virtual void UpdateOnRemove( void );
+	virtual void Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value );
 
 	void DrawDebugGeometryOverlays();
 
@@ -71,11 +73,28 @@ public:
 
 	virtual bool	IsRagdoll() { return true; }
 
+	// Underhell: ragdolls (bodies and severed limbs) are NOT treated as "flesh"
+	// for the physcannon — the player can pick them up and drag them around
+	// (see the "Bodygroups, Gibs, Ragdolls and Decals" tutorial). Vanilla
+	// CBaseEntity::VPhysicsIsFlesh() returns true for ragdolls, which makes
+	// CWeaponPhysCannon::CanPickupObject() reject them.
+	virtual bool	VPhysicsIsFlesh( void ) { return false; }
+
 	// Damage passing
 	virtual void	SetDamageEntity( CBaseEntity *pEntity );
 	virtual int		OnTakeDamage( const CTakeDamageInfo &info );
 	virtual void OnSave( IEntitySaveUtils *pUtils );
 	virtual void OnRestore();
+
+	// Underhell dismemberment state transferred from the living NPC.
+	bool			m_bUHGibable;
+	int				m_iUHGibType;
+	int				m_iUHPartHealth[5];		// remaining health, not accumulated damage
+	int				m_iUHHelmetHealth;
+	unsigned int	m_nUHSeveredParts;
+	string_t		m_iszUHGibModel[4];
+	Vector			m_vecUHDraggedLastPos;		// original DraggedThink trail anchor
+	bool			m_bUHDragged;
 
 	// Purpose: CDefaultPlayerPickupVPhysics
 	virtual void VPhysicsCollision( int index, gamevcollisionevent_t *pEvent );

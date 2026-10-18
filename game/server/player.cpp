@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: Functions dealing with the player.
 //
@@ -43,7 +44,6 @@
 #include "movevars_shared.h"
 #include "vcollide_parse.h"
 #include "player_command.h"
-#include "vehicle_base.h"
 #include "AI_Criteria.h"
 #include "globals.h"
 #include "usermessages.h"
@@ -1834,8 +1834,17 @@ void CBasePlayer::SetAnimation( PLAYER_ANIM playerAnim )
 		}
 		Q_strncat( szAnim, m_szAnimExtension ,sizeof(szAnim), COPY_ALL_CHARACTERS );
 		animDesired = LookupSequence( szAnim );
-		if (animDesired == -1)
-			animDesired = 0;
+		if ( animDesired == -1 )
+		{
+			// Underhell mirrors render the first-person player body. With no
+			// weapon animation extension, the named sequence is incomplete.
+			// Jake sequence 0 is a bind pose, so use an authored activity.
+			animDesired = SelectWeightedSequence( ACT_RANGE_ATTACK1 );
+			if ( animDesired == -1 )
+				animDesired = SelectWeightedSequence( ACT_IDLE );
+			if ( animDesired == -1 )
+				animDesired = 0;
+		}
 
 		if ( GetSequence() != animDesired || !SequenceLoops() )
 		{
@@ -1865,8 +1874,22 @@ void CBasePlayer::SetAnimation( PLAYER_ANIM playerAnim )
 			}
 			Q_strncat( szAnim, m_szAnimExtension,sizeof(szAnim), COPY_ALL_CHARACTERS );
 			animDesired = LookupSequence( szAnim );
-			if (animDesired == -1)
-				animDesired = 0;
+			if ( animDesired == -1 )
+			{
+				// Keep the named aim sequence when it exists. Inventory items
+				// can leave the extension empty, so fall back to locomotion.
+				Activity fallbackActivity;
+				if ( GetFlags() & FL_DUCKING )
+					fallbackActivity = ( speed > 1.0f ) ? ACT_CROUCH : ACT_CROUCHIDLE;
+				else
+					fallbackActivity = ( speed > 1.0f ) ? ACT_WALK : ACT_IDLE;
+
+				animDesired = SelectWeightedSequence( fallbackActivity );
+				if ( animDesired == -1 && fallbackActivity != ACT_IDLE )
+					animDesired = SelectWeightedSequence( ACT_IDLE );
+				if ( animDesired == -1 )
+					animDesired = 0;
+			}
 			SetActivity( ACT_WALK );
 		}
 		else
@@ -5380,7 +5403,8 @@ void CBasePlayer::VelocityPunch( const Vector &vecForce )
 //-----------------------------------------------------------------------------
 bool CBasePlayer::CanEnterVehicle( IServerVehicle *pVehicle, int nRole )
 {
-	// Must not have a passenger there already
+	// An NPC physics controller does not occupy a passenger role; only an
+	// actual player passenger blocks this legacy seat.
 	if ( pVehicle->GetPassenger( nRole ) )
 		return false;
 
@@ -5695,7 +5719,11 @@ CBaseEntity	*CBasePlayer::GiveNamedItem( const char *pszName, int iSubType )
 
 	if ( pent != NULL && !(pent->IsMarkedForDeletion()) ) 
 	{
-		pent->Touch( this );
+		// Underhell: weapons are not auto-picked on touch (SetPickupTouch clears
+		// the touch function), so give/equip them through Use -> BumpWeapon, which
+		// is the same path as a player pressing +use. Matches the original
+		// CBasePlayer::GiveNamedItem (decode sub_101F0AA0).
+		pent->Use( this, this, USE_TOGGLE, 0 );
 	}
 
 	return pent;

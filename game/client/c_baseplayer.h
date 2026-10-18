@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Client-side CBasePlayer.
 //
@@ -111,7 +112,6 @@ public:
 	// View model prediction setup
 	virtual void		CalcView( Vector &eyeOrigin, QAngle &eyeAngles, float &zNear, float &zFar, float &fov );
 	virtual void		CalcViewModelView( const Vector& eyeOrigin, const QAngle& eyeAngles);
-	
 
 	// Handle view smoothing when going up stairs
 	void				SmoothViewOnStairs( Vector& eyeOrigin );
@@ -203,7 +203,8 @@ public:
 	float						MaxSpeed() const		{ return m_flMaxspeed; }
 
 	// Should this object cast shadows?
-	virtual ShadowType_t		ShadowCastType() { return SHADOWS_NONE; }
+	virtual ShadowType_t		ShadowCastType();
+	virtual const QAngle&		GetRenderAngles( void );
 
 	virtual bool				ShouldReceiveProjectedTextures( int flags )
 	{
@@ -212,6 +213,7 @@ public:
 
 
 	bool						IsLocalPlayer( void ) const;
+	virtual bool				AllowOvertheShoulderView( void );
 
 	// Global/static methods
 	virtual void				ThirdPersonSwitch( bool bThirdperson );
@@ -604,6 +606,7 @@ protected:
 	surfacedata_t*	m_pSurfaceData;
 	float			m_surfaceFriction;
 	char			m_chTextureType;
+	QAngle			m_angOTSRenderAngles;
 
 	bool			m_bSentFreezeFrame;
 	float			m_flFreezeZOffset;

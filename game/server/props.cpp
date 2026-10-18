@@ -33,6 +33,10 @@
 #include "decals.h"
 #include "hierarchy.h"
 #include "shareddefs.h"
+#ifdef HL2_DLL
+#include "hl2/hl2_player.h"
+#include "underhell/uh_inventory.h"
+#endif
 #include "physobj.h"
 #include "physics_npc_solver.h"
 #include "SoundEmitterSystem/isoundemittersystembase.h"
@@ -46,6 +50,8 @@
 #include "tier0/memdbgon.h"
 
 #define DOOR_HARDWARE_GROUP 1
+
+ConVar uh_door_bash_speed( "uh_door_bash_speed", "500", 0 );
 
 // Any barrel farther away than this is ignited rather than exploded.
 #define PROP_EXPLOSION_IGNITE_RADIUS	32.0f
@@ -1840,6 +1846,7 @@ BEGIN_DATADESC( CDynamicProp )
 	// Outputs
 	DEFINE_OUTPUT( m_pOutputAnimBegun, "OnAnimationBegun" ),
 	DEFINE_OUTPUT( m_pOutputAnimOver, "OnAnimationDone" ),
+	DEFINE_OUTPUT( m_OnPlayerUse, "OnPlayerUse" ),
 
 	// Function Pointers
 	DEFINE_THINKFUNC( AnimThink ),
@@ -1863,6 +1870,27 @@ CDynamicProp::CDynamicProp()
 		UseClientSideAnimation();
 	}
 	m_iGoalSequence = -1;
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Underhell — prop_dynamic_override responds to +use and fires
+// OnPlayerUse (used by pickup props like the prologue shotgun pd_shotgun).
+//-----------------------------------------------------------------------------
+void CDynamicProp::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE useType, float value )
+{
+	CBasePlayer *pPlayer = ToBasePlayer( pActivator );
+	if ( pPlayer )
+	{
+		m_OnPlayerUse.FireOutput( pActivator, this );
+	}
+}
+
+//-----------------------------------------------------------------------------
+// Purpose: Underhell — make prop_dynamic_override targetable by +use.
+//-----------------------------------------------------------------------------
+int CDynamicProp::ObjectCaps( void )
+{
+	return BaseClass::ObjectCaps() | FCAP_IMPULSE_USE;
 }
 
 
@@ -2184,6 +2212,35 @@ void CDynamicProp::AnimThink( void )
 		{
 			// Fire output
 			m_pOutputAnimOver.FireOutput(NULL,this);
+
+			// Underhell's House wake-up camera is parented to models/blackout.mdl.
+			// The map normally releases it indirectly through OnAnimationDone ->
+			// Relay_Disable_Blackout -> trigger_knockout_teleport.  If the relay and
+			// trigger are enabled on the same simulation frame, Orange Box can miss
+			// the already-overlapping player's StartTouch: the prop then returns to
+			// its default lying animation while point_viewcontrol keeps all controls
+			// locked. Release only an *active* point_viewcontrol parented to this
+			// completed blackout prop; the normal map I/O remains authoritative for
+			// teleporting and the remaining wake-up outputs.
+			if ( GetModelName() != NULL_STRING &&
+				 !Q_stricmp( STRING( GetModelName() ), "models/blackout.mdl" ) )
+			{
+				CBasePlayer *pPlayer = UTIL_GetLocalPlayer();
+				if ( pPlayer )
+				{
+					CBaseEntity *pCamera = gEntList.FindEntityByClassname( NULL, "point_viewcontrol" );
+					while ( pCamera )
+					{
+						if ( pCamera->GetMoveParent() == this && pPlayer->GetViewEntity() == pCamera )
+						{
+							variant_t empty;
+							pCamera->AcceptInput( "Disable", this, this, empty, 0 );
+							break;
+						}
+						pCamera = gEntList.FindEntityByClassname( pCamera, "point_viewcontrol" );
+					}
+				}
+			}
 
 			// If I'm a random animator, think again when it's time to change sequence
 			if ( m_bRandomAnimator )
@@ -2899,6 +2956,19 @@ void CPhysicsProp::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, USE_TYPE 
 	CBasePlayer *pPlayer = ToBasePlayer( pActivator );
 	if ( pPlayer )
 	{
+#ifdef HL2_DLL
+		const char *pszModel = STRING( GetModelName() );
+		if ( pszModel && !Q_stricmp( pszModel, "models/PG_props/pg_obj/pg_flare.mdl" ) )
+		{
+			CHL2_Player *pHL2Player = dynamic_cast<CHL2_Player *>( pPlayer );
+			if ( pHL2Player && pHL2Player->UH_FindFreeSlot() >= 0 )
+			{
+				pHL2Player->UH_GiveItem( UH_ITEM_FLARE_PACK );
+				UTIL_Remove( this );
+				return;
+			}
+		}
+#endif
 		if ( HasSpawnFlags( SF_PHYSPROP_ENABLE_PICKUP_OUTPUT ) )
 		{
 			m_OnPlayerUse.FireOutput( this, this );
@@ -3649,6 +3719,7 @@ int	CBasePropDoor::ObjectCaps()
 void CBasePropDoor::Precache(void)
 {
 	BaseClass::Precache();
+	PrecacheScriptSound( "Metal.Door_Breach" );
 
 	RegisterPrivateActivities();
 }
@@ -4548,6 +4619,48 @@ bool CBasePropDoor::NPCOpenDoor( CAI_BaseNPC *pNPC )
 	}
 
 	return true;
+}
+
+//-----------------------------------------------------------------------------
+// Underhell door breach. Reconstructed from original sub_102146D0.
+//-----------------------------------------------------------------------------
+void CBasePropDoor::UHBreachDoor( CBaseEntity *pActivator, CBaseEntity *pCaller,
+	bool bNPCBreach, const Vector &vecImpact )
+{
+	if ( IsDoorLocked() )
+		return;
+
+#ifdef HL2_DLL
+	if ( !bNPCBreach )
+	{
+		CHL2_Player *pPlayer = dynamic_cast<CHL2_Player *>( pCaller );
+		if ( pPlayer )
+			pPlayer->SuitPower_Drain( 20.0f );
+	}
+#endif
+
+	// Keep the door's authored opening/closing sequence intact. Only alter the
+	// movement speed and direction; forcing/resetting its current sequence here
+	// corrupts animation state on models with nonstandard door sequences.
+	m_bForceClosed = true;
+	m_flSpeed = uh_door_bash_speed.GetFloat();
+
+	if ( bNPCBreach || ( !IsDoorOpening() && !IsDoorOpen() ) )
+	{
+		DoorOpen( pCaller ? pCaller : pActivator );
+	}
+	else
+	{
+		Vector forward;
+		GetVectors( &forward, NULL, NULL );
+		Vector toImpact = vecImpact - GetAbsOrigin();
+		if ( DotProduct( forward, toImpact ) >= 0.0f )
+			DoorOpen( pCaller ? pCaller : pActivator );
+		else
+			DoorClose();
+	}
+
+	EmitSound( "Metal.Door_Breach" );
 }
 
 bool CBasePropDoor::TestCollision( const Ray_t &ray, unsigned int mask, trace_t& trace )

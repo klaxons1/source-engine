@@ -301,6 +301,10 @@ IMPLEMENT_SERVERCLASS_ST_NOBASE( CBaseEntity, DT_BaseEntity )
 	SendPropInt		(SENDINFO(m_bSimulatedEveryTick),		1, SPROP_UNSIGNED ),
 	SendPropInt		(SENDINFO(m_bAnimatedEveryTick),		1, SPROP_UNSIGNED ),
 	SendPropBool( SENDINFO( m_bAlternateSorting )),
+	// Underhell: mirror/monitor-only rendering and L4D-style outline state.
+	SendPropBool( SENDINFO( m_bIsMirrorOnly )),
+	SendPropBool( SENDINFO( m_bGlow )),
+	SendPropInt( SENDINFO( m_GlowColor ), 32, SPROP_UNSIGNED, SendProxy_Color32ToInt ),
 
 #ifdef TF_DLL
 	SendPropArray3( SENDINFO_ARRAY3(m_nModelIndexOverrides), SendPropInt( SENDINFO_ARRAY(m_nModelIndexOverrides), SP_MODEL_INDEX_BITS, 0 ) ),
@@ -358,6 +362,11 @@ CBaseEntity::CBaseEntity( bool bServerOnly )
 #endif
 
 	m_bAlternateSorting = false;
+	m_bIsMirrorOnly = false;
+	m_bUHKickableDoor = true;
+	m_bGlow = false;
+	m_bHardGlow = false;
+	m_GlowColor.Init( 230, 230, 100, 100 );
 	m_CollisionGroup = COLLISION_GROUP_NONE;
 	m_iParentAttachment = 0;
 	CollisionProp()->Init( this );
@@ -1866,6 +1875,8 @@ BEGIN_DATADESC_NO_BASE( CBaseEntity )
 	DEFINE_FIELD( m_bSimulatedEveryTick, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_bAnimatedEveryTick, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_bAlternateSorting, FIELD_BOOLEAN ),
+	// Underhell: mirror/monitor-only rendering flag (keyvalue "uh_rendermirrorsonly").
+	DEFINE_KEYFIELD( m_bIsMirrorOnly, FIELD_BOOLEAN, "uh_rendermirrorsonly" ),
 	DEFINE_KEYFIELD( m_spawnflags, FIELD_INTEGER, "spawnflags" ),
 	DEFINE_FIELD( m_nTransmitStateOwnedCounter, FIELD_CHARACTER ),
 	DEFINE_FIELD( m_angAbsRotation, FIELD_VECTOR ),
@@ -1902,6 +1913,8 @@ BEGIN_DATADESC_NO_BASE( CBaseEntity )
 	DEFINE_INPUTFUNC( FIELD_INTEGER, "Alpha", InputAlpha ),
 	DEFINE_INPUTFUNC( FIELD_BOOLEAN, "AlternativeSorting", InputAlternativeSorting ),
 	DEFINE_INPUTFUNC( FIELD_COLOR32, "Color", InputColor ),
+	DEFINE_INPUTFUNC( FIELD_BOOLEAN, "Glow", InputGlow ),
+	DEFINE_INPUTFUNC( FIELD_COLOR32, "SetGlowColor", InputSetGlowColor ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetParent", InputSetParent ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetParentAttachment", InputSetParentAttachment ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetParentAttachmentMaintainOffset", InputSetParentAttachmentMaintainOffset ),
@@ -1933,6 +1946,13 @@ BEGIN_DATADESC_NO_BASE( CBaseEntity )
 	DEFINE_OUTPUT( m_OnUser2, "OnUser2" ),
 	DEFINE_OUTPUT( m_OnUser3, "OnUser3" ),
 	DEFINE_OUTPUT( m_OnUser4, "OnUser4" ),
+
+	// Underhell: fired when the player kicks this entity (uh_jake_kick).
+	DEFINE_OUTPUT( m_OnKicked, "OnKicked" ),
+	DEFINE_KEYFIELD( m_bUHKickableDoor, FIELD_BOOLEAN, "kickable" ),
+	DEFINE_FIELD( m_bGlow, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_bHardGlow, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_GlowColor, FIELD_COLOR32 ),
 
 	// Function Pointers
 	DEFINE_FUNCTION( SUB_Remove ),
@@ -3998,6 +4018,27 @@ void CBaseEntity::InputColor( inputdata_t &inputdata )
 	SetRenderColor( clr.r, clr.g, clr.b );
 }
 
+
+//-----------------------------------------------------------------------------
+// Underhell L4D-style outline state. Rendering is entirely client-side; these
+// inputs only update the exact networked fields found in DT_BaseEntity.
+//-----------------------------------------------------------------------------
+void CBaseEntity::InputSetGlowColor( inputdata_t &inputdata )
+{
+	m_GlowColor = inputdata.value.Color32();
+}
+
+void CBaseEntity::InputGlow( inputdata_t &inputdata )
+{
+	// Clean up saves produced by the former EF_BRIGHTLIGHT/tint fallback.
+	RemoveEffects( EF_BRIGHTLIGHT );
+	color32 renderColor = GetRenderColor();
+	color32 glowColor = m_GlowColor;
+	if ( renderColor.r == glowColor.r && renderColor.g == glowColor.g && renderColor.b == glowColor.b )
+		SetRenderColor( 255, 255, 255, renderColor.a );
+	m_bGlow = inputdata.value.Bool();
+	m_bHardGlow = m_bGlow;
+}
 
 //-----------------------------------------------------------------------------
 // Purpose: Called whenever the entity is 'Used'.  This can be when a player hits

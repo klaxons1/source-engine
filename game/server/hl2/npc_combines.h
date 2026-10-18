@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -26,6 +27,7 @@ public:
 	void		Spawn( void );
 	void		Precache( void );
 	void		DeathSound( const CTakeDamageInfo &info );
+	void		PainSound( const CTakeDamageInfo &info );
 	void		PrescheduleThink( void );
 	void		BuildScheduleTestBits( void );
 	int			SelectSchedule ( void );
@@ -36,8 +38,12 @@ public:
 	void		OnListened();
 
 	void		ClearAttackConditions( void );
+	void		SpawnUHShield( void );
 
 	bool		m_fIsBlocking;
+	float		m_flNextUHPainSoundTime;
+	int			m_iUHShieldType;
+	EHANDLE		m_hUHShield;
 
 	bool		IsLightDamage( const CTakeDamageInfo &info );
 	bool		IsHeavyDamage( const CTakeDamageInfo &info );

@@ -28,6 +28,7 @@
 #include "tier1/convar_serverbounded.h"
 #include "cam_thirdperson.h"
 #include "inputsystem/iinputsystem.h"
+#include "underhell/uh_freeaim.h"
 
 #if defined( _X360 )
 #include "xbox/xbox_win32stubs.h"
@@ -87,6 +88,90 @@ ConVar sensitivity( "sensitivity","3", FCVAR_ARCHIVE, "Mouse sensitivity.", true
 static ConVar m_side( "m_side","0.8", FCVAR_ARCHIVE, "Mouse side factor." );
 static ConVar m_yaw( "m_yaw","0.022", FCVAR_ARCHIVE, "Mouse yaw factor." );
 static ConVar m_forward( "m_forward","1", FCVAR_ARCHIVE, "Mouse forward factor." );
+
+// Underhell OTS/free-aim cursor. These names, defaults and the cursor math
+// below are recovered from Cliento.dll (sub_100D7980). Only move_max is read
+// by that routine; the remaining tutorial-era knobs are registered by the
+// original client for config compatibility.
+static ConVar cam_ots_freeaim_enable( "cam_ots_freeaim_enable", "1", FCVAR_ARCHIVE, "Enable Underhell viewmodel free aim." );
+static ConVar cam_ots_freeaim_interval_enable( "cam_ots_freeaim_interval_enable", "0", FCVAR_ARCHIVE );
+static ConVar cam_ots_freeaim_move_threshold( "cam_ots_freeaim_move_threshold", "0.05", FCVAR_ARCHIVE );
+static ConVar cam_ots_freeaim_move_max( "cam_ots_freeaim_move_max", "0.1", FCVAR_ARCHIVE );
+static ConVar cam_underhell_turning( "cam_underhell_turning", "1", FCVAR_ARCHIVE );
+static ConVar cam_ots_freeaim_speed_turn( "cam_ots_freeaim_speed_turn", "1", FCVAR_ARCHIVE );
+static ConVar cam_ots_freeaim_speed_evenYawSpeed( "cam_ots_freeaim_speed_evenYawSpeed", "0", FCVAR_ARCHIVE );
+static ConVar cam_ots_freeaim_autoturn_speed( "cam_ots_freeaim_autoturn_speed", "250", FCVAR_ARCHIVE );
+
+static Vector2D g_vecUHFreeAimCursor;
+
+static bool UH_FreeAimUpdateAngularCursor( float yawDelta, float pitchDelta )
+{
+	if ( !cam_ots_freeaim_enable.GetBool() )
+	{
+		g_vecUHFreeAimCursor.Init();
+		return false;
+	}
+
+	g_vecUHFreeAimCursor.x += yawDelta * ( 1.0f / 90.0f );
+	g_vecUHFreeAimCursor.y += pitchDelta * ( 1.0f / 90.0f );
+
+	float flLength = g_vecUHFreeAimCursor.Length();
+	if ( flLength > 0.0f )
+	{
+		g_vecUHFreeAimCursor /= flLength;
+		g_vecUHFreeAimCursor *= min( flLength, cam_ots_freeaim_move_max.GetFloat() );
+	}
+	return true;
+}
+
+void UH_FreeAimUpdateCursor( float mouseX, float mouseY, CUserCmd *pCmd )
+{
+	// sub_100D7980. ApplyMouse still receives the complete delta afterwards.
+	if ( !UH_FreeAimUpdateAngularCursor( m_yaw.GetFloat() * mouseX, m_pitch->GetFloat() * mouseY ) )
+		return;
+	if ( pCmd )
+	{
+		pCmd->mousedx = (short)mouseX;
+		pCmd->mousedy = (short)mouseY;
+	}
+}
+
+void UH_FreeAimUpdateTouchCursor( float yawDelta, float pitchDelta )
+{
+	// TouchScale already converted deltas to degrees; do not multiply by the
+	// desktop m_yaw/m_pitch sensitivity a second time.
+	UH_FreeAimUpdateAngularCursor( yawDelta, pitchDelta );
+}
+
+bool UH_FreeAimGetCursor( Vector2D &cursor )
+{
+	if ( !cam_ots_freeaim_enable.GetBool() )
+		return false;
+
+	cursor = g_vecUHFreeAimCursor;
+	return true;
+}
+
+// Cliento sub_10014D80: never let the free-aim ray turn behind the player's
+// horizontal facing plane.  Without this clamp, looking almost straight up or
+// down lets the cursor flip the weapon (and the kick viewmodel) over the head.
+void UH_FreeAimClampDirection( const QAngle &viewAngles, Vector &direction )
+{
+	Vector horizontalForward;
+	AngleVectors( viewAngles, &horizontalForward );
+	horizontalForward.z = 0.0f;
+	if ( VectorNormalize( horizontalForward ) == 0.0f )
+		return;
+
+	if ( DotProduct( horizontalForward, direction ) < 0.1f )
+	{
+		Vector cross, tangent;
+		CrossProduct( horizontalForward, direction, cross );
+		CrossProduct( cross, horizontalForward, tangent );
+		direction = tangent + horizontalForward * 0.1f;
+		VectorNormalize( direction );
+	}
+}
 
 static ConVar m_customaccel( "m_customaccel", "0", FCVAR_ARCHIVE, "Custom mouse acceleration:"
 	"\n0: custom accelaration disabled"
@@ -678,6 +763,9 @@ void CInput::MouseMove( CUserCmd *cmd )
 
 		// Let the client mode at the mouse input before it's used
 		g_pClientMode->OverrideMouseInput( &mouse_x, &mouse_y );
+
+		// The original accumulates free aim before applying normal camera input.
+		UH_FreeAimUpdateCursor( mouse_x, mouse_y, cmd );
 
 		// Add mouse X/Y movement to cmd
 		ApplyMouse( viewangles, cmd, mouse_x, mouse_y );
