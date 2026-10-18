@@ -263,3 +263,82 @@ inspection, installation with the companion engine app, and in-game checks using
 the real content: starting a Chapter 1 map, save/load, inventory/use/drop,
 weapons/ironsights, flashlight, mirrors/cameras, AI and transitions. No claim of
 successful Android runtime testing is made by these host checks.
+
+
+## Experimental ASTC renderer checkbox
+
+The launcher now has **ASTC-текстуры (экспериментально, нужен перезапуск)**,
+default **off**, saved in its `underhell_astc` preference. Close the engine
+completely before changing it; the existing clear-task launch contract is retained.
+The checkbox owns `-uh_astc`: stale copies in saved/free-form arguments are removed.
+There are no manual texture archives to install; the 15 embedded touch controls
+and their first-map activation are unchanged.
+
+This APK includes a **private `libshaderapidx9.so`**, not just a new `libtogl.so`:
+the companion already links/loads its own TOGL before loading the mod. The shader
+module is explicitly found through `APP_MOD_LIB`; it embeds this checkout's TOGLES,
+uses `-Bsymbolic` for both data/functions, initializes its own GL entrypoint table
+against the companion's already-current SDL context, and uses the existing
+`ILauncherMgr` window/presentation interface. No companion APK replacement or
+ELF search-path override is required. The launcher refuses missing/wrong renderer
+identity/ABI; the build verifies ELF local binding and absence of a `libtogl.so`
+dependency. This isolation still requires testing with the actual companion/device.
+The updated renderer is loaded even with the checkbox off; off disables the ASTC
+codec, not the renderer's query/decompression fixes.
+
+### Format selection and correctness
+
+- Query the driver's actual compressed-format list once, per process. Prefer
+  **native support for the exact DXT + linear/sRGB format**: it avoids transcoding
+  entirely. Previously the DXT1 extension bit incorrectly gated DXT3/5 too.
+- If that exact native format is unavailable and the checkbox is on, use ASTC
+  4x4 **only if the matching linear/sRGB ASTC enum is supported**. Otherwise use
+  the ordinary RGBA upload. Do not assume all Android GPUs support ASTC.
+- Adapted the MIT endpoint/weight algorithm from
+  `klaxons1/ASTransCoder@ab4b21320b3158f9f9c32123f36060302c62369c`.
+  Independent decoding exposed reversed *bits within each two-bit weight* in the
+  prototype (swapped intermediate colors). The native port fixes this.
+- Four-color BC1 and constant-alpha BC3 use direct block translation, without
+  full-image RGBA intermediates. BC1 three-color/transparency, BC2/DXT3, and BC3
+  independent alpha use the vendored Arm ASTC encoder **per 4x4 block**, with a
+  64-byte stack RGBA tile. Unlike the prototype, alpha is encoded independently,
+  not assigned the RGB weights. All blocks/mips of that format remain ASTC;
+  never mix an ASTC mip with a one-mip RGBA fallback.
+- ASTC is lossy. Direct-path tests observed maximum channel difference **3/255**;
+  generic fallback blocks can have greater error and additional loading cost.
+  Texture appearance, especially alpha-test edges, still needs device inspection.
+  No FPS or loading-time improvement is claimed without measurements.
+- RGBA fallback now clips NPOT/tiny mip writes and removes the unsafe
+  compressed-size == raw-size heuristic (a BC3 2x2 mip is also 16 bytes). DXT3
+  always uses four-color interpolation; compressed reads are unaligned-safe.
+
+### Unjustified waits removed
+
+`D3DGETDATA_FLUSH` now submits queued GL work and may return `S_FALSE`, as required
+for asynchronous D3D9 queries; it no longer unconditionally blocks on event or
+occlusion completion. Necessary explicit fence completion is retained, but uses
+1 ms driver waits instead of a zero-timeout CPU spin. Both `GL_ALREADY_SIGNALED`
+and `GL_CONDITION_SATISFIED` count as success; `GL_WAIT_FAILED` is not completion.
+
+### Validation and phone checklist
+
+```sh
+python3 -m pip install --target .cache/renderer-tests texture2ddecoder==1.0.6
+PYTHONPATH=.cache/renderer-tests python3 scripts/tests-underhell-renderer.py
+python3 scripts/tests-underhell.py
+```
+
+The native tests execute production codec, query and GL-upload selection code
+with ASan/UBSan, NPOT/mip/unaligned/size cases, independent ASTC decoding, and
+checkbox-on/off routing. CI also compiles ARM64 shaderapi, checks its ELF, compiles
+Java launch tests, and verifies all three actual packaged libraries plus touch VPK.
+These checks are **not** an Android GPU/runtime test.
+
+On a phone, test the same map with the checkbox off/on after fully closing the
+engine. Check alpha-test foliage, translucent UI, flashlight, water/mirrors,
+map transitions and all embedded buttons. Capture the startup log:
+`UNDERHELL_RENDERER_ASTC_V1` proves the private renderer connected;
+`Underhell ASTC: requested=..., LDR=..., sRGB=...` reports request/capability.
+If exact native DXT support exists, it deliberately bypasses ASTC even when on.
+Keep the previous working APK for rollback if companion ABI/context behavior
+on the device differs; do not equate a successful build with a verified launch.

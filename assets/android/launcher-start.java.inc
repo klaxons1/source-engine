@@ -1,6 +1,6 @@
 	private Intent prepareIntent( Intent i ) throws java.io.IOException
 	{
-		String argv = UnderhellLaunchContract.buildArguments( cmdArgs.getText().toString() );
+		String argv = UnderhellLaunchContract.buildArguments( cmdArgs.getText().toString(), underhellAstc.isChecked() );
 		String nativePath = getApplicationInfo().nativeLibraryDir;
 		UnderhellLaunchContract.requireLibraries( nativePath );
 

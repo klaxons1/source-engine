@@ -26,7 +26,7 @@
 #include "winutils.h"
 #include "tier0/vprof_telemetry.h"
 
-#if defined ( DX_TO_GL_ABSTRACTION )
+#if defined ( DX_TO_GL_ABSTRACTION ) && !defined( UNDERHELL_EMBEDDED_TOGL )
 // Placed here so inlines placed in dxabstract.h can access gGL
 COpenGLEntryPoints *gGL = NULL;
 #endif

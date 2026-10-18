@@ -32,6 +32,10 @@ extern "C" {
 #include "decompress.h"
 }
 
+#include "uh_bcdec.h"
+#ifdef UNDERHELL_ASTC
+#include "uh_astc.h"
+#endif
 #include "tier0/icommandline.h"
 #include "glmtexinlines.h"
 
@@ -3405,99 +3409,87 @@ static GLboolean isDXTcAlpha(GLenum format) {
     return 0;
 }
 
-GLvoid *uncompressDXTc(GLsizei width, GLsizei height, GLenum format, GLsizei imageSize, int transparent0, int* simpleAlpha, int* complexAlpha, const GLvoid *data) {
-    // uncompress a DXTc image
-    // get pixel size of uncompressed image => fixed RGBA
-    int pixelsize = 4;
-    if (format == GL_COMPRESSED_RGB_S3TC_DXT1_EXT || format == GL_COMPRESSED_SRGB_S3TC_DXT1_EXT)
-        pixelsize = 3;
-    // check with the size of the input data stream if the stream is in fact uncompressed
-    if (imageSize == width*height*pixelsize || data==NULL) {
-        // uncompressed stream
-        return (GLvoid*)data;
+// Check the actual format, not the old DXT1 extension bit for ALL DXT variants.
+// Query once with a current context. No extension table ABI changes are needed.
+struct UHCompressedFormats {
+    GLint count;
+    GLint formats[256];
+    bool astcEnabled;
+    UHCompressedFormats() : count(0), astcEnabled(false) {
+        GLint n = 0;
+        gGL->glGetIntegerv(GL_NUM_COMPRESSED_TEXTURE_FORMATS, &n);
+        if (n > 0 && n <= 256) {
+            gGL->glGetIntegerv(GL_COMPRESSED_TEXTURE_FORMATS, formats);
+            count = n;
+        }
+#ifdef UNDERHELL_ASTC
+        astcEnabled = CommandLine()->FindParm("-uh_astc") != 0;
+        Msg("Underhell ASTC: requested=%d, LDR=%d, sRGB=%d; native S3TC preferred\n",
+            astcEnabled, Has(0x93B0), Has(0x93D0));
+#endif
     }
-    // alloc memory
-    GLvoid *pixels = malloc(((width+3)&~3)*((height+3)&~3)*pixelsize);
-    // uncompress loop
-    int blocksize;
+    bool Has(GLenum format) const {
+        for (GLint i = 0; i < count; ++i) if (GLenum(formats[i]) == format) return true;
+        return false;
+    }
+};
+static UHBCFormat UHGetBCFormat(GLenum format) {
     switch (format) {
         case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
-        case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
+        case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT: return UH_BC1_RGB;
         case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
-        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
-            blocksize = 8;
-            break;
+        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT: return UH_BC1_RGBA;
         case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-        case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
-            blocksize = 16;
-            break;
+        case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT: return UH_BC2;
+        default: return UH_BC3;
     }
-    uintptr_t src = (uintptr_t) data;
-    for (int y=0; y<height; y+=4) {
-        for (int x=0; x<width; x+=4) {
-            switch(format) {
-                case GL_COMPRESSED_RGB_S3TC_DXT1_EXT:
-                case GL_COMPRESSED_RGBA_S3TC_DXT1_EXT:
-                case GL_COMPRESSED_SRGB_S3TC_DXT1_EXT:
-                case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT:
-                    DecompressBlockDXT1(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
-                    break;
-                case GL_COMPRESSED_RGBA_S3TC_DXT3_EXT:
-                case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT3_EXT:
-                    DecompressBlockDXT3(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
-                    break;
-                case GL_COMPRESSED_RGBA_S3TC_DXT5_EXT:
-                case GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT5_EXT:
-                    DecompressBlockDXT5(x, y, width, (uint8_t*)src, transparent0, simpleAlpha, complexAlpha, (uint32_t*)pixels);
-                    break;
-            }
-            src+=blocksize;
-        }
-    }
-    return pixels;
 }
-
 void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
-                            GLsizei width, GLsizei height, GLint border,
-                            GLsizei imageSize, const GLvoid *data) 
+    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data)
 {
-    if (internalformat==GL_RGBA8)
-        internalformat = GL_COMPRESSED_RGBA_S3TC_DXT1_EXT;
-
-	if ((width<=0) || (height<=0)) {
+    if (width <= 0 || height <= 0) return;
+    if (!isDXTc(internalformat)) Error("Underhell: unexpected compressed format %x", internalformat);
+    const UHBCFormat bc = UHGetBCFormat(internalformat);
+    const bool srgb = isDXTcSRGB(internalformat) != 0;
+    const size_t sourceSize = UHBCSize(bc, width, height);
+    if (!sourceSize || imageSize < 0 || size_t(imageSize) != sourceSize)
+        Error("Underhell: invalid DXT mip size %d (%dx%d)", imageSize, width, height);
+    static UHCompressedFormats caps;
+    if (caps.Has(internalformat)) {
+        gGL->glCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data);
         return;
     }
-
-	bool hasAlpha = (internalformat != GL_COMPRESSED_RGB_S3TC_DXT1_EXT) && (internalformat != GL_COMPRESSED_SRGB_S3TC_DXT1_EXT);
-
-   	GLenum format = hasAlpha ? GL_RGBA : GL_RGB;
-	GLenum intformat = hasAlpha ? GL_RGBA8 : GL_RGB8;
-	GLenum type = GL_UNSIGNED_BYTE;
-	GLvoid *pixels = NULL;
-
-    if (isDXTc(internalformat))
-    {
-        int srgb = isDXTcSRGB(internalformat);
-        int simpleAlpha = 0;
-        int complexAlpha = 0;
-        int transparent0 = (internalformat==GL_COMPRESSED_RGBA_S3TC_DXT1_EXT || internalformat==GL_COMPRESSED_SRGB_ALPHA_S3TC_DXT1_EXT)?1:0;
-        if (data) {
-            pixels = uncompressDXTc(width, height, internalformat, imageSize, transparent0, &simpleAlpha, &complexAlpha, data);
-        } else {
-            if(isDXTcAlpha(internalformat)) {
-                simpleAlpha = complexAlpha = 1;
-            }
+#ifdef UNDERHELL_ASTC
+    const GLenum astcFormat = srgb ? 0x93D0 : 0x93B0; // ASTC 4x4, sRGB / linear
+    if (caps.astcEnabled && caps.Has(astcFormat)) {
+        size_t bytes = UHASTCSize(width, height);
+        if (!bytes || bytes > INT_MAX) Error("Underhell: ASTC mip size overflow");
+        void *blocks = data ? malloc(bytes) : NULL;
+        // Never silently change just one mip to RGBA: mixed internal formats
+        // make the ENTIRE mip chain incomplete. Allocation/encoder errors are fatal.
+        if (data && (!blocks || !UHASTCTranscode(bc, srgb, width, height,
+                data, sourceSize, blocks, bytes))) {
+            free(blocks);
+            Error("Underhell: ASTC encoding failed (%dx%d)", width, height);
         }
-
-		if( srgb )
-			intformat = hasAlpha ? GL_SRGB8_ALPHA8 : GL_SRGB8;
-	}
-
-	gGL->glTexImage2D(target, level, intformat, width, height, border, format, type, pixels);
-	if( data != pixels )
-		free(pixels);
+        gGL->glCompressedTexImage2D(target, level, astcFormat, width, height, border, GLsizei(bytes), blocks);
+        free(blocks);
+        return;
+    }
+#endif
+    // RGBA rows are naturally 4-byte aligned, including 1x1/NPOT mip tails.
+    const unsigned channels = 4;
+    if (size_t(width) > SIZE_MAX / channels / size_t(height)) Error("Underhell: DXT image size overflow");
+    const size_t bytes = size_t(width)*height*channels;
+    void *pixels = data ? malloc(bytes) : NULL;
+    if (data && (!pixels || !UHBCDecodeImage(bc, width, height, data, sourceSize, pixels, bytes, channels))) {
+        free(pixels);
+        Error("Underhell: DXT decompression failed (%dx%d)", width, height);
+    }
+    // No raw-size heuristic: e.g. a compressed BC3 2x2 block is ALSO 16 bytes.
+    gGL->glTexImage2D(target, level, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, width, height, border,
+        GL_RGBA, GL_UNSIGNED_BYTE, pixels);
+    free(pixels);
 }
 
 // TexSubImage should work properly on every driver stack and GPU--enabling by default.
@@ -3662,10 +3654,7 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				Assert( writeWholeSlice );	//subimage not implemented in this path yet
 				// compressed path
 				// http://www.opengl.org/sdk/docs/man/xhtml/glCompressedTexImage2D.xml
-				if( gGL->m_bHave_GL_EXT_texture_compression_dxt1 )
-					gGL->glCompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
-				else
-					CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
+				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress );
 			}
 			else
 			{

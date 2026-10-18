@@ -56,6 +56,8 @@ class LauncherTests(unittest.TestCase):
                 text += 'public static final String VPK_CHSM = "";\n'
             if name == "LauncherActivity":
                 text += 'public static String MOD_NAME = "MOD_REPLACE_ME";\n'
+                text += '\tpublic void onCreate() {\n\t\tLinearLayout body = ( LinearLayout ) findViewById( R.id.body );\n}\n'
+                text += '\tpublic void saveSettings( SharedPreferences.Editor editor ) {\neditor.putString( "argv", argv );\n}\n'
                 text += '\tprivate Intent prepareIntent( Intent i ) {\n'
                 text += 'i.putExtra( "gamedir", MOD_NAME );\n}\n'
                 text += '\tpublic void startSource( View view ) {}\n\tpublic void onPause() {}\n'
@@ -72,6 +74,7 @@ class LauncherTests(unittest.TestCase):
         self.native.write_bytes(elf_fixture(apk_check.MARKERS["client"]))
         self.server = self.native.with_name("libserver.so")
         self.server.write_bytes(elf_fixture(apk_check.MARKERS["server"]))
+        self.native.with_name("libshaderapidx9.so").write_bytes(elf_fixture(apk_check.MARKERS["shaderapidx9"]))
 
     def test_branding_and_exact_lowercase_gamedir(self):
         branding.prepare(self.launcher)
@@ -83,6 +86,9 @@ class LauncherTests(unittest.TestCase):
         self.assertEqual(manifest.find("application").get(branding.ANDROID + "extractNativeLibs"), "true")
         self.assertIn("FLAG_ACTIVITY_CLEAR_TASK", java)
         self.assertIn("UnderhellLaunchContract.requireLibraries", java)
+        self.assertIn('getBoolean("underhell_astc", false)', java)
+        self.assertIn('editor.putBoolean("underhell_astc", underhellAstc.isChecked())', java)
+        self.assertEqual(java.count("new android.widget.CheckBox(this)"), 1)
         self.assertIn('putExtra( "argv", argv )', java)
         label = ET.parse(self.android / "res/values/updates.xml").find("string[@name='mod_name']")
         self.assertEqual(label.text, "underhell")
@@ -193,7 +199,7 @@ class ApkIdentityTests(unittest.TestCase):
         extra.parent.mkdir(parents=True)
         extra.write_bytes(b"touch VPK fixture")
         result = apk_check.verify(self.apk, self.badging, self.root / "android")
-        self.assertEqual(len(result["libraries"]), 2)
+        self.assertEqual(len(result["libraries"]), 3)
 
     def test_rejects_absent_or_stale_embedded_touch_assets(self):
         stage = self.root / "android"

@@ -1900,7 +1900,7 @@ HRESULT IDirect3DQuery9::GetData(void* pData,DWORD dwSize,DWORD dwGetDataFlags)
 	// if an answer is not yet available - return S_FALSE.
 	// if an answer is available - return S_OK and write the answer into *pData.
 	bool done = false;
-	bool flush = (dwGetDataFlags & D3DGETDATA_FLUSH) != 0;	// aka spin until done
+	bool flush = (dwGetDataFlags & D3DGETDATA_FLUSH) != 0; // submit, NOT wait for GPU
 
 	// hmmm both of these paths are the same, maybe we could fold them up
 		if ( m_type == D3DQUERYTYPE_OCCLUSION )
@@ -1934,79 +1934,18 @@ HRESULT IDirect3DQuery9::GetData(void* pData,DWORD dwSize,DWORD dwGetDataFlags)
 			}
 		}
 		
-		switch( m_type )
-		{
-			case	D3DQUERYTYPE_OCCLUSION:
-			{
-				
-			if ( flush )
-				{
-				uint oqValue = 0;
-					CFastTimer tm;
-					tm.Start();
-										
-
-						// Is this flush actually necessary? According to the extension it's not.
-						// It doesn't seem to matter if this is a glFlush() or glFinish() with NVidia's driver (tested in MT mode - not sure if it matters), it still can take several calls to IsDone() before we can stop waiting for the query results.
-						// On AMD, this flush logic fails during shutdown (the query results never become available) - tried a bunch of experiments and checks with no luck.
-																						
-				m_query->Complete(&oqValue);
-
-											
-				double flTotalTime = tm.GetDurationInProgress().GetSeconds() * 1000.0f;
-				if ( flTotalTime > .5f )
-						{
-							// Give up - something silly has obviously gone wrong in the driver, lying is better than stalling potentially forever.
-							// This occurs on AMD (single threaded driver) during shutdown, not sure why yet. It has nothing to do with threading. It may have to do with releasing queries or other objects.
-							// We must return a result otherwise the app itself could hang, waiting infinitely.
-							//Assert( 0 );
-					Warning( "IDirect3DQuery9::GetData(): Occlusion query flush took %3.3fms!\n", flTotalTime );
-						}
-				if (pData)
-				{
-					*(uint*)pData = oqValue;
-					}
-				result = S_OK;
-				}
-			else
-			{
-				done = m_query->IsDone();
-				if (done)
-				{
-					uint oqValue = 0;				// or we could just pass pData directly to Complete...
-					m_query->Complete(&oqValue);
-					if (pData)
-					{
-						*(uint*)pData = oqValue;
-					}					
-					result = S_OK;
-				}
-				else
-				{
-					result = S_FALSE;
-					Assert( !flush );
-				}
-				}
-			}
-			break;
-
-			case	D3DQUERYTYPE_EVENT:
-			{
-				done = m_query->IsDone();
-				if ( ( done ) || ( flush ) )
-				{
-					m_query->Complete(NULL);	// this will block on pre-SLGU
-					
-					result = S_OK;
-				}
-				else
-				{
-					result = S_FALSE;
-					Assert( !flush );
-				}
-			}
-			break;
-	}
+	// D3DGETDATA_FLUSH submits queued work; D3D9 still permits S_FALSE.
+    // Blocking Complete() here serialized the CPU/GPU on every flush poll.
+    if (flush) gGL->glFlush();
+    if (m_type == D3DQUERYTYPE_OCCLUSION || m_type == D3DQUERYTYPE_EVENT) {
+        done = m_query->IsDone();
+        if (done) {
+            uint value = 0;
+            m_query->Complete(&value);
+            if (pData) *(uint*)pData = m_type == D3DQUERYTYPE_EVENT ? 1 : value;
+            result = S_OK;
+        }
+    }
 
 	return result;
 }

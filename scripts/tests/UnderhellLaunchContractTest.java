@@ -18,18 +18,22 @@ public class UnderhellLaunchContractTest {
         eq(UnderhellLaunchContract.buildArguments("-game -console -game=lostcoast"),base+" -console");
         eq(UnderhellLaunchContract.buildArguments("+echo \"keep -game lostcoast here\""),base+" +echo \"keep -game lostcoast here\"");
         boolean bad=false;try {UnderhellLaunchContract.buildArguments("\"unclosed");}catch(IllegalArgumentException e){bad=true;}if(!bad)throw new AssertionError();
+        eq(UnderhellLaunchContract.buildArguments("-console",true),base+" -console -uh_astc");
+        eq(UnderhellLaunchContract.buildArguments("-uh_astc -UH_ASTC=1 -console",false),base+" -console");
+        eq(UnderhellLaunchContract.buildArguments("-uh_astc -uh_astc=0",true),base+" -uh_astc");
         File root=Files.createTempDirectory("underhell-java").toFile();
-        File c=new File(root,"libclient.so"),s=new File(root,"libserver.so");
+        File c=new File(root,"libclient.so"),s=new File(root,"libserver.so"),r=new File(root,"libshaderapidx9.so");
         try {
             bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError();
             Files.write(c.toPath(),elf(UnderhellLaunchContract.CLIENT_MARKER,183));
             Files.write(s.toPath(),elf(UnderhellLaunchContract.SERVER_MARKER,183));
+            Files.write(r.toPath(),elf(UnderhellLaunchContract.RENDERER_MARKER,183));
             UnderhellLaunchContract.requireLibraries(root.toString());
             Files.write(s.toPath(),elf("stock module",183));
             bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError();
             Files.write(s.toPath(),elf(UnderhellLaunchContract.SERVER_MARKER,40));
             bad=false;try{UnderhellLaunchContract.requireLibraries(root.toString());}catch(IOException e){bad=true;}if(!bad)throw new AssertionError();
-        } finally {c.delete();s.delete();root.delete();}
+        } finally {c.delete();s.delete();r.delete();root.delete();}
         System.out.println("Launch contract Java tests passed");
     }
 }

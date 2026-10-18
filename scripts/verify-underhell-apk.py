@@ -11,7 +11,8 @@ import sys
 import zipfile
 
 PACKAGE = "com.valvesoftware.source.underhell"
-MARKERS = {"client": b"UNDERHELL_PORT_CLIENT_V1", "server": b"UNDERHELL_PORT_SERVER_V1"}
+MARKERS = {"client": b"UNDERHELL_PORT_CLIENT_V1", "server": b"UNDERHELL_PORT_SERVER_V1",
+           "shaderapidx9": b"UNDERHELL_RENDERER_ASTC_V1"}
 ABIS = {"arm64-v8a": (2, 183), "armeabi-v7a": (1, 40)}
 
 

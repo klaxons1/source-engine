@@ -34,6 +34,23 @@ def prepare(launcher):
             if start < 0 or end < 0:
                 raise ValueError("Unexpected launcher startup method layout")
             text = text[:start] + (ASSETS / "launcher-start.java.inc").read_text(encoding="utf-8") + text[end:]
+            if "// Underhell ASTC checkbox" not in text:
+                anchor = '\tpublic void saveSettings( SharedPreferences.Editor editor )'
+                text = text.replace(anchor, '\tprivate android.widget.CheckBox underhellAstc;\n\n' + anchor, 1)
+                anchor = '\t\tLinearLayout body = ( LinearLayout ) findViewById( R.id.body );'
+                if anchor not in text:
+                    raise ValueError("Launcher settings view contract changed")
+                text = text.replace(anchor, anchor + '''
+        // Underhell ASTC checkbox: persisted independently of free-form argv.
+        underhellAstc = new android.widget.CheckBox(this);
+        underhellAstc.setText("ASTC-текстуры (экспериментально, нужен перезапуск)");
+        underhellAstc.setChecked(mPref.getBoolean("underhell_astc", false));
+        underhellAstc.setOnCheckedChangeListener((button, checked) ->
+            mPref.edit().putBoolean("underhell_astc", checked).apply());
+        body.addView(underhellAstc);
+''', 1)
+                text = text.replace('editor.putString( "argv", argv );',
+                    'editor.putString( "argv", argv );\n        editor.putBoolean("underhell_astc", underhellAstc.isChecked());', 1)
         if name == "ExtractAssets" and (android / "assets/extras_dir.vpk").is_file():
             digest = hashlib.sha256((android / "assets/extras_dir.vpk").read_bytes()).hexdigest()
             text, count = re.subn(r'(VPK_CHSM\s*=\s*)"[^"]*"', lambda m: m[1] + '"' + digest + '"', text)

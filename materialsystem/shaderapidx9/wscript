@@ -74,6 +74,29 @@ def build(bld):
 	elif bld.env.DEST_OS == 'win32' and not bld.env.GL:
 		libs += ['D3D9', 'D3DX9', 'bzip2']
 	
+	linkflags = []
+	if bld.env.DEST_OS == 'android' and bld.env.TOGLES:
+		# The companion launcher already loaded its own libtogl.so. Embed ours
+		# in the explicitly mod-loaded shaderapi; bind data AND functions locally.
+		allowed = ('dx9asmtogl2.cpp', 'dxabstract.cpp', 'glentrypoints.cpp', 'glmgr.cpp',
+			'glmgrbasics.cpp', 'cglmtex.cpp', 'cglmfbo.cpp', 'cglmprogram.cpp',
+			'cglmbuffer.cpp', 'cglmquery.cpp', 'asanstubs.cpp', 'decompress.c',
+			'uh_bcdec.cpp', 'uh_astc.cpp')
+		source += ['../../togles/linuxwin/' + p for p in allowed]
+		defines += ['UNDERHELL_EMBEDDED_TOGL=1', 'UNDERHELL_ASTC=1', 'TOGL_DLL_EXPORT=1']
+		libs.remove('togl')
+		libs += ['underhell_astcenc', 'SDL2']
+		includes += ['../../togles', '../../togles/thirdparty/astcenc']
+		linkflags += ['-Wl,-Bsymbolic']
+		# Isolate third-party code from Source's global defines/memory overrides.
+		astcenv = bld.env.derive()
+		astcenv.DEFINES = ['NDEBUG']
+		astcenv.CXXFLAGS = [f for f in astcenv.CXXFLAGS if not f.startswith('-std=')
+			and f not in ('-ffast-math', '-funsafe-math-optimizations')] + ['-std=c++14', '-fno-fast-math', '-ffp-contract=off']
+		bld.stlib(name='underhell_astcenc', target='underhell_astcenc', env=astcenv,
+			source=bld.path.find_node('../../togles/thirdparty/astcenc').ant_glob('astcenc_*.cpp'),
+			includes=['../../togles/thirdparty/astcenc'], install_path=None)
+
 	install_path = bld.env.LIBDIR
 
 	bld.shlib(
@@ -84,6 +107,7 @@ def build(bld):
 		includes = includes,
 		defines  = defines,
 		use      = libs,
+		linkflags = linkflags,
 		install_path = install_path,
 		subsystem = bld.env.MSVC_SUBSYSTEM,
 		idx      = bld.get_taskgen_count()

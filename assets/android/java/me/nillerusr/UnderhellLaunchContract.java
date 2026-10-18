@@ -13,6 +13,8 @@ public final class UnderhellLaunchContract {
     public static final String CLIENT_MARKER = "UNDERHELL_PORT_CLIENT_V1";
     public static final String SERVER_MARKER = "UNDERHELL_PORT_SERVER_V1";
 
+    public static final String RENDERER_MARKER = "UNDERHELL_RENDERER_ASTC_V1";
+
     private UnderhellLaunchContract() {}
 
     private static final class Token {
@@ -45,6 +47,10 @@ public final class UnderhellLaunchContract {
     }
 
     public static String buildArguments(String input) {
+        return buildArguments(input, false);
+    }
+
+    public static String buildArguments(String input, boolean astc) {
         List<Token> args = tokens(input == null ? "" : input);
         // Always non-empty: the companion must not fall back to its saved Lost Coast argv.
         StringBuilder out = new StringBuilder("-game underhell -defaultgamedir underhell");
@@ -57,9 +63,12 @@ public final class UnderhellLaunchContract {
                 }
                 continue;
             }
+            // This switch belongs to the checkbox, never to a stale saved argv.
+            if (value.equals("-uh_astc") || value.startsWith("-uh_astc=")) continue;
             if (value.startsWith("-game=") || value.startsWith("-defaultgamedir=")) continue;
             out.append(' ').append(args.get(i).raw);
         }
+        if (astc) out.append(" -uh_astc");
         return out.toString();
     }
 
@@ -69,6 +78,8 @@ public final class UnderhellLaunchContract {
         File root = new File(directory);
         int client = checkLibrary(new File(root, "libclient.so"), CLIENT_MARKER);
         int server = checkLibrary(new File(root, "libserver.so"), SERVER_MARKER);
+        int renderer = checkLibrary(new File(root, "libshaderapidx9.so"), RENDERER_MARKER);
+        if (renderer != client) throw new IOException("Underhell renderer ABI mismatch");
         if (client != server) throw new IOException("Underhell client/server ABI mismatch");
     }
 
