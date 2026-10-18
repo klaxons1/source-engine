@@ -21,6 +21,15 @@
 		try
 		{
 			if (mPref.getString("underhell_renderer", "gles").equals("sarek")) {
+                // The GLES companion has its own storage grant; it does not grant
+                // this UID access to the resources for the owned native runner.
+                if (android.os.Build.VERSION.SDK_INT >= 23 && checkSelfPermission(android.Manifest.permission.WRITE_EXTERNAL_STORAGE)
+                        != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                    requestPermissions(new String[] { android.Manifest.permission.READ_EXTERNAL_STORAGE,
+                        android.Manifest.permission.WRITE_EXTERNAL_STORAGE }, 17322);
+                    android.widget.Toast.makeText(this, "Разрешите доступ к ресурсам и нажмите запуск ещё раз.", android.widget.Toast.LENGTH_LONG).show();
+                    return;
+                }
                 UnderhellLaunchContract.requireLibraries(getApplicationInfo().nativeLibraryDir);
                 for (String module : new String[] { "shaderapidx9_sarek", "launcher_sarek", "dxvk_sarek_d3d9", "SDL2", "hidapi", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook" })
                     if (!new java.io.File(getApplicationInfo().nativeLibraryDir, "lib" + module + ".so").isFile())
