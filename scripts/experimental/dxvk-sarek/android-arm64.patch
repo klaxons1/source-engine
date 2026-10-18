@@ -51,10 +51,10 @@ index 0e0594833169984df1bd04351ce8a32e0a224365..68a417e304517c4292496f819f770a00
  
 diff --git a/src/d3d9/d3d9.android.map b/src/d3d9/d3d9.android.map
 new file mode 100644
-index 0000000000000000000000000000000000000000..9ed446d285e17faffc25330e5e0c061904efdc20
+index 0000000000000000000000000000000000000000..a1205bf919b9edd47bf220eb7b28f08da198a374
 --- /dev/null
 +++ b/src/d3d9/d3d9.android.map
-@@ -0,0 +1,25 @@
+@@ -0,0 +1,27 @@
 +{
 +  global:
 +    Direct3DShaderValidatorCreate9;
@@ -75,6 +75,8 @@ index 0000000000000000000000000000000000000000..9ed446d285e17faffc25330e5e0c0619
 +    DXVK_RegisterAnnotation;
 +    DXVK_UnRegisterAnnotation;
 +    Direct3D9ForceHybridEnumeration;
++    DXVKSarekDirect3DCreate9;
++    DXVKSarekGetAdapterMemoryBytes;
 +    DXVKSarekSetAndroidDisplay;
 +    DXVKSarekSetAndroidWindowProvider;
 +    DXVKSarekNotifyAndroidSurface;
@@ -281,6 +283,52 @@ index bda894fae3c0864053a026baf48a9a04661c19cd..47424a24be3465e9305d59f525d0e1c4
  
      D3DLOCKED_BOX lockedBox;
      HRESULT hr = LockImage(cursorTex, 0, 0, &lockedBox, nullptr, D3DLOCK_READONLY);
+diff --git a/src/d3d9/d3d9_main.cpp b/src/d3d9/d3d9_main.cpp
+index e182b5fa3f65da8ec662c5f6a2a8752c00f5f541..15e0a392e6554762371063c49311a9b997d51c0b 100644
+--- a/src/d3d9/d3d9_main.cpp
++++ b/src/d3d9/d3d9_main.cpp
+@@ -1,4 +1,5 @@
+ #include "../dxvk/dxvk_instance.h"
++#include <limits>
+ 
+ #include "d3d9_interface.h"
+ #include "d3d9_shader_validator.h"
+@@ -26,6 +27,35 @@ namespace dxvk {
+ 
+ extern "C" {
+ 
++  // Unique entry point: the legacy companion libtogl also exports Direct3DCreate9.
++  // Never let dynamic interposition give the native shaderapi a TOGL COM object.
++  DLLEXPORT IDirect3D9* DXVKSarekDirect3DCreate9(UINT) {
++    IDirect3D9Ex* result = nullptr;
++    dxvk::CreateD3D9(false, &result);
++    return result;
++  }
++
++  // The pointer MUST come from this library's matching factory above.
++  DLLEXPORT uint64_t DXVKSarekGetAdapterMemoryBytes(void* d3d9, uint32_t ordinal) {
++    if (!d3d9) return 0;
++    auto object = static_cast<dxvk::D3D9InterfaceEx*>(static_cast<IDirect3D9*>(d3d9));
++    auto adapter = object->GetAdapter(ordinal);
++    if (!adapter) return 0;
++    auto info = adapter->GetDXVKAdapter()->getMemoryHeapInfo();
++    uint64_t total = 0;
++    for (uint32_t i = 0; i < info.heapCount; i++) {
++      if (info.heaps[i].heapFlags & VK_MEMORY_HEAP_DEVICE_LOCAL_BIT) {
++        uint64_t budget = info.heaps[i].memoryBudget;
++        if (budget > std::numeric_limits<uint64_t>::max() - total)
++          return std::numeric_limits<uint64_t>::max();
++        total += budget;
++      }
++    }
++    // Budget extension if present, advertised heap size otherwise. Not guessed RAM.
++    return total;
++  }
++
++
+   DLLEXPORT IDirect3D9* __stdcall Direct3DCreate9(UINT nSDKVersion) {
+     IDirect3D9Ex* pDirect3D = nullptr;
+     dxvk::CreateD3D9(false, &pDirect3D);
 diff --git a/src/d3d9/d3d9_surface.cpp b/src/d3d9/d3d9_surface.cpp
 index 31dc7ade655dcb0cca9986e7a4209c754c0b888d..a395f4423c7b98f81c1d7a61859058c5f5d57eba 100644
 --- a/src/d3d9/d3d9_surface.cpp

@@ -29,7 +29,8 @@ def inspect_elf(library, tools):
     symbols = run('llvm-nm', '-D', '--defined-only')
     exports = sorted(line.split()[-1] for line in symbols.splitlines() if line.strip())
     required = {'Direct3DCreate9', 'Direct3DCreate9Ex', 'DXVKSarekSetAndroidDisplay',
-                'DXVKSarekSetAndroidWindowProvider', 'DXVKSarekNotifyAndroidSurface'}
+                'DXVKSarekSetAndroidWindowProvider', 'DXVKSarekNotifyAndroidSurface',
+                'DXVKSarekDirect3DCreate9', 'DXVKSarekGetAdapterMemoryBytes'}
     if not required <= set(exports):
         raise ValueError(f'Missing public exports: {required - set(exports)}')
     if any(name.startswith('_Z') for name in exports):

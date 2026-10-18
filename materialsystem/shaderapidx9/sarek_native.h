@@ -5,6 +5,8 @@
 #define HMODULE SarekNativeModule
 #include <d3d9.h>
 #undef HMODULE
+extern "C" IDirect3D9* DXVKSarekDirect3DCreate9(UINT sdkVersion);
+extern "C" uint64_t DXVKSarekGetAdapterMemoryBytes(void* d3d9, uint32_t ordinal);
 #define __D3DX9_H__
 #include <d3dx9math.h>
 #undef __D3DX9_H__

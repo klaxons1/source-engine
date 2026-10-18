@@ -27,6 +27,10 @@ before its launcher. It checks exact lowercase `underhell/gameinfo.txt`, uses
 an explicit game-resource path, and installs both the embedded Underhell extras
 VPK and the companion base extras VPK. SDL passes arguments as an array, preserving
 quoted arguments rather than using the companion's fixed-buffer strtok path.
+The native shaderapi uses the unique `DXVKSarekDirect3DCreate9` export: the
+companion TOGL also exports `Direct3DCreate9`, so an unqualified symbol would risk
+returning an incompatible TOGL object. Video-memory reporting queries the selected
+adapter's device-local Vulkan heap budget/size, not Windows WMI or invented RAM.
 ASTC is GLES-only; the stored checkbox setting survives a renderer change.
 
 ## Launcher / ZIP drivers

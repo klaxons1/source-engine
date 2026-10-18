@@ -1,0 +1,3 @@
+# Unified diff context represents an empty source line with a single space.
+# Those are patch syntax, not trailing whitespace in the patched C++ code.
+*.patch -whitespace

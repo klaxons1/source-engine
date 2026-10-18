@@ -189,7 +189,9 @@ bool CShaderDeviceMgrDx8::Connect( CreateInterfaceFn factory )
 	
 	mat_supports_d3d9ex.SetValue( bD3D9ExAvailable ? 1 : 0 );
 #else
-	#if defined( DO_DX9_HOOK )
+	#if defined(UNDERHELL_SAREK)
+		m_pD3D = DXVKSarekDirect3DCreate9(D3D_SDK_VERSION);
+	#elif defined( DO_DX9_HOOK )
 		m_pD3D = Direct3DCreate9Hook(D3D_SDK_VERSION);
 	#else
 		m_pD3D = Direct3DCreate9(D3D_SDK_VERSION);
@@ -1486,6 +1488,11 @@ int CShaderDeviceMgrDx8::GetVidMemBytes( int nAdapter ) const
 {
 #if defined( _X360 )
 	return 256*1024*1024;
+#elif defined(UNDERHELL_SAREK)
+	// WMI does not exist on Android. Query the actual selected Vulkan adapter's
+	// device-local budget (advertised heap size when budget is unavailable).
+	uint64 nBytes = DXVKSarekGetAdapterMemoryBytes(D3D(), nAdapter);
+	return nBytes > INT_MAX ? INT_MAX : (int)nBytes;
 #elif defined (DX_TO_GL_ABSTRACTION)
 	D3DADAPTER_IDENTIFIER9 devIndentifier;
 	D3D()->GetAdapterIdentifier( nAdapter, D3DENUM_WHQL_LEVEL, &devIndentifier );
