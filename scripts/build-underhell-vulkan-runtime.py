@@ -75,6 +75,7 @@ def main():
     run(sys.executable, ROOT / 'scripts/build-dxvk-sarek-android.py', '--ndk', ndk,
         '--output', args.sdk.resolve(), '--jobs', args.jobs)
     run(sys.executable, ROOT / 'scripts/test-underhell-sarek-math.py', '--sdk', args.sdk.resolve())
+    run(sys.executable, ROOT / 'scripts/test-underhell-sarek-colors.py', '--sdk', args.sdk.resolve())
     adreno_patch = ROOT / 'scripts/experimental/adrenotools-underhell.patch'
     key = hashlib.sha256(adreno_patch.read_bytes()).hexdigest()[:12]
     adreno = checkout('adrenotools-' + ADRENO[:12] + '-' + key,

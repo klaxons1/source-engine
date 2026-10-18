@@ -196,3 +196,32 @@ native-surface creation from queue presentation-support failures. The native
 engine error names DXVK-Sarek / Vulkan rather than the platform-wide OpenGL label.
 The user's Adreno 640 still needs a launch test with the corrected APK; fixing
 these integration defects does not prove subsequent game rendering.
+
+### Source / native D3D9 color byte-order boundary
+
+The Adreno 640 report after the Surface fix reaches a real swapchain. Red/blue
+exchange is consistent with two independently reproducible integration defects:
+
+* The shared bitmap mapping treated `IMAGE_FORMAT_RGBA8888` as native D3D9
+  `A8R8G8B8` (BGRA bytes). For `bitmap_sarek` only, RGBA now maps to `A8B8G8R8`,
+  with the corresponding reverse mapping; BGRA still maps to `A8R8G8B8`.
+* The unchanged GLES-built companion/client use `OPENGL_SWAP_COLORS` vertex
+  writers (RGBA). Native shaderapi declarations must therefore fetch color and
+  specular as `UBYTE4N`, not BGRA `D3DCOLOR`. Native shaderapi's own inline writers
+  now use the same byte layout. Packed bone indices share that writer convention;
+  normalized RGBA fetch preserves the existing DX9 shader's `D3DCOLORtoUBYTE4`
+  `.zyxw` operation rather than introducing an extra R/B exchange.
+
+`test-underhell-sarek-colors.py` compiles the production format-mapping functions,
+vertex-declaration selector, and byte writers against the native D3D9 headers.
+ASan/UBSan checks cover primary colors, blue/orange, white, transparent/nontrivial
+alpha, companion-style RGBA input and bone indices; a separate GLES profile
+checks that the legacy format/vertex contracts are unchanged. The pre-fix code
+fails the RGBA mapping check. No swapchain-wide swizzle or forced surface format
+is applied: presenting an A8R8G8B8 backbuffer to an R8G8B8A8 swapchain is valid
+when the blit performs the normal format conversion.
+
+This color fix is not a claim to fix the other device reports: the posted log
+still requests a 640x480 D3D backbuffer and presents to a 2309x1080 Android
+surface, and repeatedly recreates the swapchain. Font availability, render-mode
+selection, input scaling and the recreation trigger require separate validation.

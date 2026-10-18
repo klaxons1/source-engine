@@ -19,7 +19,9 @@
 #include "tier2/meshutils.h"
 #include "mathlib/mathlib.h"
 
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) || defined( UNDERHELL_SAREK )
+// Keep native Sarek vertex writers compatible with the unchanged GLES-built
+// companion/client producers (including the packed bone-index layout).
 // Swap these so that we do color swapping on 10.6.2, which doesn't have EXT_vertex_array_bgra
 #define	OPENGL_SWAP_COLORS
 #endif

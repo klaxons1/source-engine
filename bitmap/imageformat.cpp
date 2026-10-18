@@ -320,6 +320,10 @@ ImageFormat D3DFormatToImageFormat( D3DFORMAT format )
 	case D3DFMT_A8R8G8B8:
 		return IMAGE_FORMAT_BGRA8888;
 #endif
+#ifdef UNDERHELL_SAREK
+	case D3DFMT_A8B8G8R8:
+		return IMAGE_FORMAT_RGBA8888;
+#endif
 	case D3DFMT_X8R8G8B8:
 		return IMAGE_FORMAT_BGRX8888;
 	case D3DFMT_R5G6B5:
@@ -431,7 +435,12 @@ D3DFORMAT ImageFormatToD3DFormat( ImageFormat format )
 	case IMAGE_FORMAT_RGB888:
 		return D3DFMT_R8G8B8;
 	case IMAGE_FORMAT_RGBA8888:
+#ifdef UNDERHELL_SAREK
+		// Real D3D9 A8R8G8B8 is BGRA in little-endian memory, not RGBA.
+		return D3DFMT_A8B8G8R8;
+#else
 		return D3DFMT_A8R8G8B8;
+#endif
 	case IMAGE_FORMAT_BGRX8888:
 		return D3DFMT_X8R8G8B8;
 	case IMAGE_FORMAT_BGR565:
