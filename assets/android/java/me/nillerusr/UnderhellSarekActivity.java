@@ -12,6 +12,18 @@ import java.util.*;
 /** Own UID + isolated GPU process. The external GLES companion path is unchanged. */
 public final class UnderhellSarekActivity extends SDLActivity {
     private static native void configureNative(String[] keys, String[] values, int width, int height, int refreshMilliHz);
+    private static native void nativeSetResumed(boolean resumed);
+    @Override protected void onPause() {
+        // Stop WSI access before SDL waits for the render thread's pause acknowledgement.
+        if (!mBrokenLibraries) nativeSetResumed(false);
+        super.onPause();
+    }
+    @Override protected void onResume() {
+        // SDL may start its native thread in super.onResume(). Surface validity is
+        // checked separately; a missing/replaced Surface is never presented to.
+        if (!mBrokenLibraries) nativeSetResumed(true);
+        super.onResume();
+    }
     @Override protected String[] getLibraries() { return new String[] { "SDL2", "launcher_sarek" }; }
     @Override protected String getMainFunction() { return "LauncherMainAndroid"; }
     @Override protected String[] getArguments() {

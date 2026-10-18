@@ -394,7 +394,7 @@ index 31dc7ade655dcb0cca9986e7a4209c754c0b888d..a395f4423c7b98f81c1d7a61859058c5
  
  
 diff --git a/src/d3d9/d3d9_swapchain.cpp b/src/d3d9/d3d9_swapchain.cpp
-index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..f7b63088135f07cc3eaf87c3e901bba087eebc66 100644
+index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..9f59c7bcf9beef5681ea0d9952541307420d59fb 100644
 --- a/src/d3d9/d3d9_swapchain.cpp
 +++ b/src/d3d9/d3d9_swapchain.cpp
 @@ -9,170 +9,13 @@
@@ -573,6 +573,34 @@ index 792cc02f1044655d2e955d8a918b5dc41aa99a4b..f7b63088135f07cc3eaf87c3e901bba0
    static uint16_t MapGammaControlPoint(float x) {
      if (x < 0.0f) x = 0.0f;
      if (x > 1.0f) x = 1.0f;
+@@ -283,6 +126,13 @@ namespace dxvk {
+     if (hDestWindowOverride != nullptr)
+       window    = hDestWindowOverride;
+ 
++    // Android's host provider returns no window while paused/Surface-less.
++    // Device loss here would make Source abort during an ordinary app switch.
++    if (!wsi::isWindow(window)) {
++      m_dirty = true;
++      return D3D_OK;
++    }
++
+     bool recreate = false;
+     recreate   |= m_presenter == nullptr;
+     recreate   |= window != m_window;
+@@ -318,6 +168,13 @@ namespace dxvk {
+       PresentImage(presentInterval);
+       return D3D_OK;
+     } catch (const DxvkError& e) {
++      // The UI thread can pause/destroy the Surface between our initial check
++      // and acquisition. Retry with a fresh surface after resume, not a fake
++      // successful presentation or a permanent device-loss report.
++      if (!wsi::isWindow(window)) {
++        m_dirty = true;
++        return D3D_OK;
++      }
+       Logger::err(e.message());
+       return D3DERR_DEVICEREMOVED;
+     }
 diff --git a/src/d3d9/meson.build b/src/d3d9/meson.build
 index 34f4be64ee2e45afb11a666650cfd31ddd0f4ca8..634f68cff44769ae3dfa47df54a6f85bceb8b0fd 100644
 --- a/src/d3d9/meson.build

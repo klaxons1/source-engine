@@ -7,18 +7,22 @@
 #include <cstdlib>
 #include <dlfcn.h>
 #include <cstdint>
+#include <atomic>
 #include "android-host.h"
 
 static jclass hostClass;
 static jmethodID getSurface;
+static jmethodID surfaceIsValid;
+static std::atomic<bool> activityResumed{false};
 
 static ANativeWindow* currentWindow(void* hwnd) {
-    if (!hwnd || !hostClass || !getSurface) return NULL;
+    if (!activityResumed.load() || !hwnd || !hostClass || !getSurface || !surfaceIsValid) return NULL;
     JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
     if (!env) return NULL;
     jobject surface = env->CallStaticObjectMethod(hostClass, getSurface);
     if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
-    ANativeWindow* window = surface ? ANativeWindow_fromSurface(env, surface) : NULL;
+    bool valid = surface && env->CallBooleanMethod(surface, surfaceIsValid);
+    ANativeWindow* window = valid && !env->ExceptionCheck() ? ANativeWindow_fromSurface(env, surface) : NULL;
     if (surface) env->DeleteLocalRef(surface);
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
@@ -56,7 +60,10 @@ Java_me_nillerusr_UnderhellSarekActivity_configureNative(JNIEnv* env, jclass cla
     }
     hostClass = static_cast<jclass>(env->NewGlobalRef(clazz));
     getSurface = env->GetStaticMethodID(clazz, "getNativeSurface", "()Landroid/view/Surface;");
-    if (!hostClass || !getSurface || env->ExceptionCheck()) return;
+    jclass surfaceClass = env->FindClass("android/view/Surface");
+    surfaceIsValid = surfaceClass ? env->GetMethodID(surfaceClass, "isValid", "()Z") : NULL;
+    if (surfaceClass) env->DeleteLocalRef(surfaceClass);
+    if (!hostClass || !getSurface || !surfaceIsValid || env->ExceptionCheck()) return;
     DXVKSarekSetAndroidWindowProvider(currentWindow);
     typedef void (*RegisterSurfaceCallback)(void (*)(void));
     void* sdl = dlopen("libSDL2.so", RTLD_NOW | RTLD_NOLOAD);
@@ -67,3 +74,9 @@ Java_me_nillerusr_UnderhellSarekActivity_configureNative(JNIEnv* env, jclass cla
 }
 
 extern "C" __attribute__((used, visibility("default"))) const char UnderhellSarekLauncher[] = "UNDERHELL_SAREK_LAUNCHER_V1";
+
+extern "C" __attribute__((visibility("default"))) JNIEXPORT void JNICALL
+Java_me_nillerusr_UnderhellSarekActivity_nativeSetResumed(JNIEnv*, jclass, jboolean resumed) {
+    activityResumed.store(resumed);
+    DXVKSarekNotifyAndroidSurface();
+}

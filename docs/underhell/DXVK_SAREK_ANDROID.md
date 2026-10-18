@@ -88,6 +88,9 @@ the callback resolves the **current** Java Surface to an acquired ANativeWindow.
 Sizing releases temporary references. A successful Vulkan surface keeps its
 window reference until `vkDestroySurfaceKHR`, including surface replacement.
 
+The activity marks its provider unavailable before SDL's pause handshake; JNI
+also checks `Surface.isValid()`. A Surface-less D3D9 present is deferred and marked
+for recreation rather than falsely treating a normal app switch as device loss.
 Owned SDL notifies an atomic surface epoch on `surfaceChanged`. The presenter
 invalidates/recreates the Vulkan surface/swapchain on an epoch change instead of
 reusing a stale Android window. D3D is windowed internally; SDL/Android owns actual
