@@ -13,7 +13,9 @@ def annotate(text):
     if os.environ.get("GITHUB_ACTIONS") == "true":
         text = re.sub(r"\x1b\[[0-9;]*m", "", text)
         # Workflow command data escaping, including literal percent signs.
-        text = text[-24000:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
+        # GitHub truncates an annotation at 4096 decoded characters. Keep
+        # the ACTUAL failure tail, not the first 4K of a much longer build log.
+        text = text[-3800:].replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A")
         print("::error title=Android Waf failure::" + text, flush=True)
 
 
