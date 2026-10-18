@@ -743,6 +743,7 @@
     "Case-sensitive includes corrected to the actual engine header names.",
     "Android optional shader module resolves from native library directories, not Windows content DLLs.",
     "max() uses the network variable integer value explicitly in InputBleedPlayer.",
-    "Added Android touch free-aim updates in in_touch.cpp, using scaled angular deltas without desktop sensitivity multiplication."
+    "Added Android touch free-aim updates in in_touch.cpp, using scaled angular deltas without desktop sensitivity multiplication.",
+    "Replaced Windows-style unbounded swprintf HUD calls with V_swprintf_safe for Android Bionic compatibility."
   ]
 }

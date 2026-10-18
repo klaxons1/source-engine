@@ -82,6 +82,9 @@ sh scripts/build-apk.sh
 The native script initializes `lib`, `thirdparty`, and `ivp` recursively before
 configuring Waf. The APK script pins the external template and SDK, configures
 branding without the upstream Lost Coast/extras script, and stops on errors.
+Waf failures stream normally and expose their diagnostic tail as CI annotations
+(including `config.log` on configure failure) so compiler errors remain
+inspectable through the GitHub API.
 It does not `git pull` arbitrary launcher changes after native libraries have
 been installed. Template revisions:
 
@@ -107,7 +110,8 @@ The gameinfo changes are adapted separately. The blood-material files added and
 then deleted upstream remain deleted; the final material-precache fix is kept.
 The engine's existing Bink ABI and its player-animation/platform changes are
 preserved. A `max()` call on a network variable is adapted to use its integer
-value explicitly. Touch input now updates the same free-aim cursor as desktop
+value explicitly. Windows-style HUD `swprintf` calls use the bounded portable
+`V_swprintf_safe` helper for Android/Bionic. Touch input now updates the same free-aim cursor as desktop
 mouse input; already-scaled angular deltas are not multiplied by desktop mouse
 sensitivity again.
 
@@ -144,6 +148,8 @@ compilation or linking):
 
 ```sh
 python3 scripts/check-underhell-cpp.py
+# Exercise Android preprocessor branches using the host compiler (still NOT an NDK build):
+python3 scripts/check-underhell-cpp.py --android-branches
 # Optional: check every client/server translation unit, including unchanged code.
 python3 scripts/check-underhell-cpp.py --all
 ```

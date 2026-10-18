@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -256,6 +257,12 @@ class BuildTests(unittest.TestCase):
             for directory in (ROOT / "game" / side / "underhell", ROOT / "game/shared/underhell"):
                 for source in directory.rglob("*.cpp"):
                     self.assertIn(source.resolve(), sources, str(source))
+
+    def test_hud_uses_portable_bounded_wide_formatting(self):
+        for path in (ROOT / "game/client/underhell").rglob("*.cpp"):
+            self.assertIsNone(re.search(r"\bswprintf\s*\(", path.read_text()), str(path))
+        for name in ("hud_uhbattery.cpp", "hud_hermitcards.cpp"):
+            self.assertIn("V_swprintf_safe(", (ROOT / "game/client/underhell" / name).read_text())
 
     def test_native_and_apk_builds_select_underhell(self):
         for arch in ("aarch64", "armv7a"):

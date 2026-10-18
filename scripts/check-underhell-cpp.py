@@ -37,6 +37,8 @@ def main():
     parser.add_argument("--all", action="store_true", help="check all translation units, not just ported ones")
     parser.add_argument("--jobs", type=int, default=4)
     parser.add_argument("--compiler", default="g++")
+    parser.add_argument("--android-branches", action="store_true",
+                        help="enable Android preprocessor paths with host GCC; NOT a cross-build")
     args = parser.parse_args()
     manifest = json.loads((ROOT / "docs/underhell/upstream-port.json").read_text())
     changed = {(ROOT / entry["local"]).resolve() for entry in manifest["sources"]}
@@ -44,6 +46,9 @@ def main():
     jobs = []
     for side in ("client", "server"):
         data, flags = project(side)
+        if args.android_branches:
+            flags = [f for f in flags if not f.startswith("-DPLATFORM_POSIX")]
+            flags += ["-DANDROID=1", "-D_ANDROID=1", "-D__ANDROID__=1"]
         if side == "client":
             data["sources"].append("in_touch.cpp")
         for name in data["sources"]:
