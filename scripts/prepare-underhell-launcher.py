@@ -8,6 +8,7 @@ import xml.etree.ElementTree as ET
 GAME = "underhell"
 PACKAGE = "com.valvesoftware.source." + GAME
 ANDROID = "{http://schemas.android.com/apk/res/android}"
+ASSETS = Path(__file__).resolve().parent.parent / "assets/android"
 
 
 def prepare(launcher):
@@ -26,7 +27,16 @@ def prepare(launcher):
                 raise ValueError("Launcher must pass the exact lowercase underhell gamedir")
             if 'putExtra( "gamedir", MOD_NAME )' not in text:
                 raise ValueError("Launcher gamedir intent contract changed")
+        if name == "LauncherActivity":
+            start = text.find("\tprivate Intent prepareIntent(")
+            end = text.find("\tpublic void onPause()", start)
+            if start < 0 or end < 0:
+                raise ValueError("Unexpected launcher startup method layout")
+            text = text[:start] + (ASSETS / "launcher-start.java.inc").read_text(encoding="utf-8") + text[end:]
         changes[path] = text
+
+    helper = "java/me/nillerusr/UnderhellLaunchContract.java"
+    changes[android / "src/me/nillerusr/UnderhellLaunchContract.java"] = (ASSETS / helper).read_text(encoding="utf-8")
 
     path = android / "AndroidManifest.xml"
     text = path.read_text(encoding="utf-8")
@@ -35,7 +45,11 @@ def prepare(launcher):
         raise ValueError("Unexpected Android manifest package")
     if manifest.find("application").get(ANDROID + "label") != "@string/mod_name":
         raise ValueError("Application label no longer uses mod_name")
-    changes[path] = text.replace("MOD_REPLACE_ME", GAME)
+    text = text.replace("MOD_REPLACE_ME", GAME)
+    # The companion reads nativeLibraryDir, not zip entries inside this APK.
+    text = re.sub(r' android:extractNativeLibs="[^"]*"', "", text)
+    text = text.replace("<application ", '<application android:extractNativeLibs="true" ', 1)
+    changes[path] = text
 
     path = android / "res/values/updates.xml"
     text = path.read_text(encoding="utf-8")
@@ -50,6 +64,7 @@ def prepare(launcher):
         if "MOD_REPLACE_ME" in text or "APP_NAME" in text:
             raise ValueError("Unresolved placeholder in " + str(path))
     for path, text in changes.items():
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(text, encoding="utf-8")
     print("Launcher: underhell; gamedir: underhell; package: " + PACKAGE)
 

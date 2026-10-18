@@ -43,6 +43,7 @@ def main():
     manifest = json.loads((ROOT / "docs/underhell/upstream-port.json").read_text())
     changed = {(ROOT / entry["local"]).resolve() for entry in manifest["sources"]}
     changed.add(ROOT / "game/client/in_touch.cpp")
+    changed.add(ROOT / "game/shared/underhell/uh_port_status.cpp")
     jobs = []
     for side in ("client", "server"):
         data, flags = project(side)

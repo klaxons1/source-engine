@@ -10,6 +10,7 @@ SDK_REV=9c474caf7be38a887574291f611152fc24a7afe3
 # Do not git-pull an unreviewed template after installing the native libraries.
 git -C "$LAUNCHER" fetch --depth 1 origin "$LAUNCHER_REV"
 git -C "$LAUNCHER" checkout --detach "$LAUNCHER_REV"
+python3 "$ROOT/scripts/test-underhell-launch-contract.py"
 python3 "$ROOT/scripts/prepare-underhell-launcher.py" "$LAUNCHER"
 
 # Use our own icon, not extras/icons/lc.png (Lost Coast).
@@ -31,5 +32,7 @@ export ANDROID_SDK_HOME="$PWD/android-sdk"
 chmod +x waf
 ./waf configure -T release --javac-source-target=8
 ./waf build
+python3 "$ROOT/scripts/verify-underhell-apk.py" build/android/mod-signed.apk \
+    --sdk "$ANDROID_SDK_HOME" --staging android
 # Keep the workflow's existing mod-signed.apk path, and offer a branded copy too.
 cp build/android/mod-signed.apk build/android/underhell.apk

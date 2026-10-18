@@ -18,6 +18,57 @@ and supplies its own game directory and native library directory, as the templat
 already did. The APK does not contain Underhell's copyrighted models/maps/sounds
 or the base Half-Life 2 content.
 
+## If Lost Coast starts or Underhell features are missing
+
+The former sender relied only on `gamedir` / `gamelibdir` Intent extras. The
+reviewed companion (`nillerusr/srceng-android`, `7fb280dadf9c0199d1fa287844a02292ee9d281a`)
+uses a `singleTask` SDLActivity with no `onNewIntent` handler: a repeated launch
+can merely resume the previous game without rerunning `ValveActivity2.initNatives`.
+This is a concrete restart hazard, **not** proof of what happened on an unseen
+phone or in a different installed companion fork.
+
+The updated mod sender:
+
+- starts a fresh companion task with `NEW_TASK | CLEAR_TASK` instead of resuming
+  the previous SDLActivity; **save any running game before starting Underhell**;
+- always sends nonempty `-game underhell -defaultgamedir underhell` argv, removes
+  old game-selection switches from the mod's saved arguments, and keeps other
+  quoted arguments intact;
+- requests native library extraction and refuses to launch if readable ARM ELF
+  `libclient.so` / `libserver.so` with this port's identity markers are missing;
+- logs the requested game, arguments and native path under `UnderhellLaunch`,
+  and displays launch exceptions instead of silently ignoring them.
+
+A final APK gate checks the *compiled* package and all application labels using
+SDK aapt/aapt2, verifies ARM64 client/server identity markers in the packaged ELF
+files, and compares their SHA-256 hashes with the installed native build outputs.
+The actual Java policy is compiled and executed in the APK build before branding.
+
+For a phone-side check, first save/exit and **force-stop Source Engine** in
+Android settings, install this updated APK and open the **underhell** icon (not
+the generic Source Engine or old Lost Coast icon). In the engine console run:
+
+```text
+uh_client_port_status
+uh_server_port_status
+```
+
+The server command is available after starting a local map. These commands print
+`UNDERHELL_PORT_CLIENT_V1` / `UNDERHELL_PORT_SERVER_V1`, the source revision, actual
+game directory and `APP_MOD_LIB`. Both commands must exist in the new port. An
+unknown command indicates that the corresponding port module is not loaded;
+changing resource files alone cannot add native gameplay features to a stock DLL.
+The same identities are logged when a map initializes.
+
+If the problem persists, supply the companion app/version, the complete contents
+of `underhell/gameinfo.txt`, and the launch log. With adb, useful Java-side logs
+are `adb logcat -s UnderhellLaunch SRCAPK`; also attach the engine's `engine.log`
+or the console output of the two status commands. `SRCAPK` should show the
+received Underhell arguments and the native engine log should show the mod
+library path. If the directory is correct but Lost Coast content still appears,
+check the actual installed gameinfo SearchPaths and map/autoexec settings. The
+repository's example gameinfo is not automatically written onto the phone.
+
 ## Content layout: case matters
 
 Put your legally obtained content in the data root configured in the companion

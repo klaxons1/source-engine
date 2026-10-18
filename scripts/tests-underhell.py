@@ -12,6 +12,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 import warnings
+import zipfile
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +27,17 @@ def load(name, filename):
 
 branding = load("underhell_branding", "prepare-underhell-launcher.py")
 content_check = load("underhell_content", "check-underhell-content.py")
+apk_check = load("underhell_apk", "verify-underhell-apk.py")
+java_tests = load("underhell_java_tests", "test-underhell-launch-contract.py")
+
+
+def elf_fixture(marker, machine=183):
+    header = bytearray(64)
+    header[:4] = b"\x7fELF"
+    header[4:6] = bytes([2 if machine == 183 else 1, 1])
+    header[18:20] = machine.to_bytes(2, "little")
+    return bytes(header) + marker
+
 
 
 class LauncherTests(unittest.TestCase):
@@ -40,7 +52,9 @@ class LauncherTests(unittest.TestCase):
             text = "import com.valvesoftware.source.MOD_REPLACE_ME.R;\n"
             if name == "LauncherActivity":
                 text += 'public static String MOD_NAME = "MOD_REPLACE_ME";\n'
-                text += 'i.putExtra( "gamedir", MOD_NAME );\n'
+                text += '\tprivate Intent prepareIntent( Intent i ) {\n'
+                text += 'i.putExtra( "gamedir", MOD_NAME );\n}\n'
+                text += '\tpublic void startSource( View view ) {}\n\tpublic void onPause() {}\n'
             path.write_text(text)
         (self.android / "AndroidManifest.xml").write_text(
             '<manifest xmlns:android="http://schemas.android.com/apk/res/android" '
@@ -51,7 +65,9 @@ class LauncherTests(unittest.TestCase):
         values.write_text('<resources><string name="mod_name">APP_NAME</string></resources>')
         self.native = self.android / "lib/arm64-v8a/libclient.so"
         self.native.parent.mkdir(parents=True)
-        self.native.write_bytes(b"native library must not be overwritten")
+        self.native.write_bytes(elf_fixture(apk_check.MARKERS["client"]))
+        self.server = self.native.with_name("libserver.so")
+        self.server.write_bytes(elf_fixture(apk_check.MARKERS["server"]))
 
     def test_branding_and_exact_lowercase_gamedir(self):
         branding.prepare(self.launcher)
@@ -60,9 +76,13 @@ class LauncherTests(unittest.TestCase):
         self.assertIn('putExtra( "gamedir", MOD_NAME )', java)
         manifest = ET.parse(self.android / "AndroidManifest.xml").getroot()
         self.assertEqual(manifest.get("package"), "com.valvesoftware.source.underhell")
+        self.assertEqual(manifest.find("application").get(branding.ANDROID + "extractNativeLibs"), "true")
+        self.assertIn("FLAG_ACTIVITY_CLEAR_TASK", java)
+        self.assertIn("UnderhellLaunchContract.requireLibraries", java)
+        self.assertIn('putExtra( "argv", argv )', java)
         label = ET.parse(self.android / "res/values/updates.xml").find("string[@name='mod_name']")
         self.assertEqual(label.text, "underhell")
-        self.assertEqual(self.native.read_bytes(), b"native library must not be overwritten")
+        self.assertEqual(self.native.read_bytes(), elf_fixture(apk_check.MARKERS["client"]))
         before = {p: p.read_bytes() for p in self.android.rglob("*") if p.is_file()}
         branding.prepare(self.launcher)
         self.assertEqual(before, {p: p.read_bytes() for p in before})
@@ -88,14 +108,16 @@ class LauncherTests(unittest.TestCase):
         launcher = root / "srceng-mod-launcher"
         launcher.mkdir()
         shutil.copytree(self.android, launcher / "android")
-        for name in ("build-apk.sh", "prepare-underhell-launcher.py"):
+        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py"):
             shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
-        (root / "assets/android").mkdir(parents=True)
-        shutil.copy2(ROOT / "assets/android/underhell.png", root / "assets/android/underhell.png")
+        shutil.copytree(ROOT / "assets/android", root / "assets/android")
+        shutil.copytree(ROOT / "scripts/tests", root / "scripts/tests")
         bin_dir = root / "bin"
         bin_dir.mkdir()
         programs = {
             "git": '#!/bin/sh\necho "$*" >> "$TEST_LOG"\nif [ "$1" = clone ]; then for last do :; done; mkdir -p "$last"; fi\n',
+            "javac": "#!/bin/sh\nexit 0\n",
+            "java": "#!/bin/sh\nexit 0\n",
             "convert": '#!/bin/sh\nfor last do :; done; printf icon > "$last"\n',
         }
         for name, text in programs.items():
@@ -103,19 +125,89 @@ class LauncherTests(unittest.TestCase):
             path.write_text(text)
             path.chmod(0o755)
         waf = launcher / "waf"
-        waf.write_text('#!/bin/sh\nset -e\nif [ "$1" = build ]; then mkdir -p build/android; printf apk > build/android/mod-signed.apk; fi\n')
+        waf.write_text("#!/usr/bin/env python3\nimport sys, pathlib, zipfile\n"
+                       "if sys.argv[1] == 'build':\n"
+                       " pathlib.Path('build/android').mkdir(parents=True, exist_ok=True)\n"
+                       " with zipfile.ZipFile('build/android/mod-signed.apk','w') as z:\n"
+                       "  for p in pathlib.Path('android/lib').rglob('*.so'): z.write(p, str(p.relative_to('android')))\n")
+        aapt = launcher / "android-sdk/build-tools/test/aapt"
+        aapt.parent.mkdir(parents=True)
+        aapt.write_text("#!/bin/sh\nprintf \"package: name='com.valvesoftware.source.underhell'\\napplication-label:'underhell'\\n\"\n")
+        aapt.chmod(0o755)
         log = root / "git-commands"
         env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"], TEST_LOG=str(log))
+        for key in ("JAVA", "JAVAC", "JAVA_COMPILER_JAR"):
+            env.pop(key, None)
         for _ in range(2):
             subprocess.run(["sh", str(root / "scripts/build-apk.sh")], cwd=self.launcher, env=env,
                            check=True, capture_output=True, text=True)
-        self.assertEqual((launcher / "build/android/underhell.apk").read_bytes(), b"apk")
+        apk_check.verify(launcher / "build/android/underhell.apk",
+                         "package: name='com.valvesoftware.source.underhell'\napplication-label:'underhell'", launcher / "android")
         self.assertEqual((launcher / "android/lib/arm64-v8a/libclient.so").read_bytes(),
-                         b"native library must not be overwritten")
+                         elf_fixture(apk_check.MARKERS["client"]))
         commands = log.read_text()
         self.assertIn("2174bf02eb7f46b457538dccecf3cbc42b6057d5", commands)
         self.assertIn("9c474caf7be38a887574291f611152fc24a7afe3", commands)
         self.assertNotIn("pull", commands)
+
+
+class JavaLaunchTests(unittest.TestCase):
+    @unittest.skipUnless((os.environ.get("JAVA") or shutil.which("java")) and
+                         (os.environ.get("JAVA_COMPILER_JAR") or os.environ.get("JAVAC") or shutil.which("javac")),
+                         "Java runtime/compiler not installed")
+    def test_real_java_launch_contract(self):
+        java_tests.run()
+
+
+class ApkIdentityTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.apk = self.root / "underhell.apk"
+        self.badging = "package: name='com.valvesoftware.source.underhell' versionCode='1'\napplication-label:'underhell'\n"
+        self.libraries = {"lib/arm64-v8a/lib" + name + ".so": elf_fixture(marker)
+                          for name, marker in apk_check.MARKERS.items()}
+
+    def pack(self, libraries=None):
+        with zipfile.ZipFile(self.apk, "w") as archive:
+            for name, data in (self.libraries if libraries is None else libraries).items():
+                archive.writestr(name, data)
+
+    def test_valid_native_modules_and_staging_hashes(self):
+        self.pack()
+        for name, data in self.libraries.items():
+            path = self.root / "android" / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        result = apk_check.verify(self.apk, self.badging, self.root / "android")
+        self.assertEqual(len(result["libraries"]), 2)
+
+    def test_rejects_old_package_and_wrong_label(self):
+        self.pack()
+        for bad in (self.badging.replace("source.underhell", "source.lostcoast"),
+                    self.badging.replace("label:'underhell'", "label:'Underhell'"),
+                    self.badging + "application-label-ru:'Half-Life 2'\n"):
+            with self.assertRaises(ValueError):
+                apk_check.verify(self.apk, bad)
+
+    def test_rejects_missing_server_or_wrong_case(self):
+        for names in ({"lib/arm64-v8a/libclient.so": self.libraries["lib/arm64-v8a/libclient.so"]},
+                      {key.replace("libserver.so", "libServer.so"): value for key, value in self.libraries.items()}):
+            self.pack(names)
+            with self.assertRaises(ValueError):
+                apk_check.verify(self.apk, self.badging)
+
+    def test_rejects_stock_libraries_and_wrong_abi(self):
+        for bad in (elf_fixture(b"stock client"), elf_fixture(apk_check.MARKERS["client"], machine=40)):
+            self.pack(dict(self.libraries, **{"lib/arm64-v8a/libclient.so": bad}))
+            with self.assertRaises(ValueError):
+                apk_check.verify(self.apk, self.badging)
+
+    def test_rejects_stale_staging(self):
+        self.pack()
+        with self.assertRaises(ValueError):
+            apk_check.verify(self.apk, self.badging, self.root / "wrong-build-output")
 
 
 class ContentTests(unittest.TestCase):

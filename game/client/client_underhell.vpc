@@ -59,6 +59,7 @@ $Project "Client (Underhell)"
 				$File	"underhell\shadereditor\uh_shadereditor_system.h"
 			}
 
+			$File	"$SRCDIR\game\shared\underhell\uh_port_status.cpp"
 			$File	"$SRCDIR\game\shared\underhell\uh_inventory.cpp"
 			$File	"$SRCDIR\game\shared\underhell\uh_inventory.h"
 		}
