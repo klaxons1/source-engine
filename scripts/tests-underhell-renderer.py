@@ -104,7 +104,7 @@ void TestUploads(bool enabled) {
  CompressedTexImage2D(0,1,0x83F1,2,2,0,8,bc);assert(uploadGL.format==first);
  CompressedTexImage2D(0,0,0x83F2,5,7,0,64,bc);assert(uploadGL.format==first);
  // Dynamic / autogen callers opt out, even when the checkbox is on.
- CompressedTexImage2D(0,0,0x83F2,4,4,0,16,bc,false);assert(uploadGL.format==GL_RGBA8);
+ UHCompressedTexImage2D(0,0,0x83F2,4,4,0,16,bc,false);assert(uploadGL.format==GL_RGBA8);
  bool failed=false;try{CompressedTexImage2D(0,0,0x83F2,2,2,0,15,bc);}catch(...){failed=true;}assert(failed);
 }
 '''

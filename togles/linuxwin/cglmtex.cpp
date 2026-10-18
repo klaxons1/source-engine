@@ -3444,8 +3444,8 @@ static UHBCFormat UHGetBCFormat(GLenum format) {
         default: return UH_BC3;
     }
 }
-void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
-    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data, bool allowASTC = true)
+static void UHCompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
+    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data, bool allowASTC)
 {
     if (width <= 0 || height <= 0) return;
     if (!isDXTc(internalformat)) Error("Underhell: unexpected compressed format %x", internalformat);
@@ -3490,6 +3490,13 @@ void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
     gGL->glTexImage2D(target, level, srgb ? GL_SRGB8_ALPHA8 : GL_RGBA8, width, height, border,
         GL_RGBA, GL_UNSIGNED_BYTE, pixels);
     free(pixels);
+}
+
+// Preserve the existing eight-argument entry point used by GLMContext::CleanupTex.
+void CompressedTexImage2D(GLenum target, GLint level, GLenum internalformat,
+    GLsizei width, GLsizei height, GLint border, GLsizei imageSize, const GLvoid *data)
+{
+    UHCompressedTexImage2D(target, level, internalformat, width, height, border, imageSize, data, true);
 }
 
 // TexSubImage should work properly on every driver stack and GPU--enabling by default.
@@ -3654,7 +3661,7 @@ void CGLMTex::WriteTexels( GLMTexLockDesc *desc, bool writeWholeSlice, bool noDa
 				Assert( writeWholeSlice );	//subimage not implemented in this path yet
 				// compressed path
 				// http://www.opengl.org/sdk/docs/man/xhtml/glCompressedTexImage2D.xml
-				CompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress,
+				UHCompressedTexImage2D( target, desc->m_req.m_mip, intformat, slice->m_xSize, slice->m_ySize, 0, slice->m_storageSize, sliceAddress,
                     !(m_layout->m_key.m_texFlags & (kGLMTexDynamic | kGLMTexMippedAuto | kGLMTexRenderable)) );
 			}
 			else
