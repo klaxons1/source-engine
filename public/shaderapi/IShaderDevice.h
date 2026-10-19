@@ -268,7 +268,7 @@ public:
 	virtual void RefreshFrontBufferNonInteractive( ) = 0;
 	virtual void HandleThreadEvent( uint32 threadEvent ) = 0;
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined(DX_TO_GL_ABSTRACTION) || defined(UNDERHELL_SAREK_DX6)
 	virtual void DoStartupShaderPreloading( void ) = 0;
 #endif
 	virtual char *GetDisplayDeviceName() = 0;

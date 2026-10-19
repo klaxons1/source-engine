@@ -43,6 +43,62 @@ def main():
             ('windows', ['-DEXPECTED=80'])):
             subprocess.run([compiler, '-std=c++11', '-fsyntax-only', str(cpp)] + definitions, check=True)
             print('PASS: actual minimum-DX policy:', name)
+    material = (ROOT / 'materialsystem/cmaterialsystem.cpp').read_text()
+    start = material.index('#if defined(UNDERHELL_SAREK_DX6)')
+    cvar = material[start:material.index('#endif', start) + len('#endif')]
+    # Compile the actual ConVar declaration as well: retaining Source's GL-layout
+    # ABI must not accidentally retain its hard 90..92 mat_dxlevel clamp.
+    stub = r"""
+#include <cstdlib>
+#include <cassert>
+struct ConVar {
+    int value; float minimum, maximum;
+    ConVar(const char*, const char* initial, int, const char*, bool, float low, bool, float high, ...)
+      : value(std::atoi(initial)), minimum(low), maximum(high) {}
+};
+"""
+    with tempfile.TemporaryDirectory(prefix='underhell-dx6-cvar-') as tmp:
+        cpp = Path(tmp) / 'cvar.cpp'
+        cpp.write_text(stub + cvar + '\nint main() { assert(mat_dxlevel.value == EXPECTED); assert(mat_dxlevel.minimum == FLOOR); assert(mat_dxlevel.maximum == CEILING); }\n')
+        for name, defs in (('legacy-gl-abi', ['-DUNDERHELL_SAREK_DX6=1', '-DDX_TO_GL_ABSTRACTION=1', '-DEXPECTED=60', '-DFLOOR=60', '-DCEILING=60']),
+                           ('normal-gles', ['-DDX_TO_GL_ABSTRACTION=1', '-DEXPECTED=92', '-DFLOOR=90', '-DCEILING=92'])):
+            exe = Path(tmp) / name
+            subprocess.run([compiler, '-std=c++11', str(cpp), '-o', str(exe)] + defs, check=True)
+            subprocess.run([str(exe)], check=True)
+            print('PASS: actual mat_dxlevel ConVar / min / max:', name)
+    device_header = (ROOT / 'public/shaderapi/IShaderDevice.h').read_text()
+    begin = device_header.index('virtual void HandleThreadEvent')
+    tail = device_header[begin:device_header.index('\n};', begin)]
+    with tempfile.TemporaryDirectory(prefix='underhell-dx6-abi-') as tmp:
+        tmp = Path(tmp)
+        (tmp / 'abi.h').write_text('using uint32 = unsigned;\nclass Device { public:\n' + tail + '\n};\nextern "C" Device* device();\nextern "C" int preloads();\n')
+        (tmp / 'producer.cpp').write_text(r"""
+#include "abi.h"
+static int calls;
+class NativeDevice : public Device {
+ void HandleThreadEvent(uint32) override {}
+ void DoStartupShaderPreloading() override { ++calls; }
+ char* GetDisplayDeviceName() override { static char name[] = "Sarek DX6"; return name; }
+};
+extern "C" Device* device() { static NativeDevice instance; return &instance; }
+extern "C" int preloads() { return calls; }
+""")
+        (tmp / 'consumer.cpp').write_text(r"""
+#include "abi.h"
+#include <cassert>
+#include <cstring>
+int main() {
+ Device* value = device();
+ value->HandleThreadEvent(0);
+ value->DoStartupShaderPreloading();
+ assert(preloads() == 1);
+ assert(std::strcmp(value->GetDisplayDeviceName(), "Sarek DX6") == 0);
+}
+""")
+        subprocess.run([compiler, '-std=c++11', '-DUNDERHELL_SAREK_DX6=1', '-c', str(tmp / 'producer.cpp'), '-o', str(tmp / 'native.o')], check=True)
+        subprocess.run([compiler, '-std=c++11', '-DDX_TO_GL_ABSTRACTION=1', str(tmp / 'consumer.cpp'), str(tmp / 'native.o'), '-o', str(tmp / 'abi')], check=True)
+        subprocess.run([str(tmp / 'abi')], check=True)
+    print('PASS: actual shader-device vtable tail across native DX6 and GL-layout material system TUs')
     launcher = (ROOT / 'launcher/launcher.cpp').read_text()
     for module in ('materialsystem_sarek_dx6', 'shaderapidx9_sarek_dx6'):
         assert '"' + module + '" DLL_EXT_STRING' in launcher

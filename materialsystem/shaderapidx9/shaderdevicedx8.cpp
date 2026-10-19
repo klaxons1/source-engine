@@ -3623,7 +3623,10 @@ void CShaderDeviceDx8::DestroyPixelShader( PixelShaderHandle_t hShader )
 	ShaderManager()->DestroyPixelShader( hShader );
 }
 
-#ifdef DX_TO_GL_ABSTRACTION
+#ifdef UNDERHELL_SAREK_DX6
+// Retain the companion's GL-layout vtable slot, but never preload GL shaders.
+void CShaderDeviceDx8::DoStartupShaderPreloading( void ) {}
+#elif defined(DX_TO_GL_ABSTRACTION)
 void CShaderDeviceDx8::DoStartupShaderPreloading( void )
 {
 	ShaderManager()->DoStartupShaderPreloading();

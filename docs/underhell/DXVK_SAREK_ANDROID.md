@@ -290,11 +290,14 @@ This is not just a command-line preset: three separately named libraries are
 built and checked in the APK:
 
 * `materialsystem_sarek_dx6`: a Source-ABI material system with its minimum
-  compiled as 60, rather than the companion's POSIX minimum 90. It loads the
+  compiled as 60 and its mat_dxlevel ConVar fixed at 60, rather than the
+  companion's POSIX minimum 90 / GL ConVar clamp 90..92. It loads the
   private DX6 dictionary explicitly and cannot let companion DX8/9/mod shader
   DLLs overwrite it. Includes the original fixed-function Wireframe fallback.
 * `shaderapidx9_sarek_dx6`: the real native Sarek shaderapi with a minimum and
-  maximum level of 60. Normal Sarek keeps its existing target/caps behavior.
+  maximum level of 60. Its material-system/shader-device interfaces retain the
+  companion GL-layout startup-preload vtable slot (implemented as a no-op, not GL
+  shader preloading). Normal Sarek keeps its existing target/caps behavior.
 * `stdshader_dx6_sarek`: all **32 shader source units** listed in the original
   `stdshader_dx6.vpc`, including lightmapped/vertex-lit/unlit, eyes/teeth, water,
   sprites, depth/shadows and old screen-space paths. Legacy files that use the

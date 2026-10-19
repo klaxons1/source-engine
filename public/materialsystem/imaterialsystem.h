@@ -1056,7 +1056,7 @@ public:
 	// Contains context in so it can make decisions (i.e. if it's a model, ignore certain cheat parameters)
 	virtual IMaterial *			FindMaterialEx( char const* pMaterialName, const char *pTextureGroupName, int nContext, bool complain = true, const char *pComplainPrefix = NULL ) = 0;
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined(DX_TO_GL_ABSTRACTION) || defined(UNDERHELL_SAREK_DX6)
 	virtual void				DoStartupShaderPreloading( void ) = 0;
 #endif	
 

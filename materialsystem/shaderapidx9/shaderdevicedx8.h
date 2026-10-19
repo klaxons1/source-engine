@@ -299,7 +299,7 @@ protected:
 
 	void ReacquireResourcesInternal( bool bResetState = false, bool bForceReacquire = false, char const *pszForceReason = NULL );
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined(DX_TO_GL_ABSTRACTION) || defined(UNDERHELL_SAREK_DX6)
 public:
 	virtual void DoStartupShaderPreloading( void );
 protected:
