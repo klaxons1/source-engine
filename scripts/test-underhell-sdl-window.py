@@ -72,13 +72,22 @@ public class SDLActivity {
 
 def test_surface_destroy(sdl):
     # Execute the actual patched JNI body against a host SDL/EGL/window mock.
-    with tempfile.TemporaryDirectory(prefix='underhell-surface-destroy-') as tmp:
+    # Reproduce production: a plain SDL copy under the engine Git checkout,
+    # not a standalone /tmp folder where git cannot discover the parent repo.
+    cache = ROOT / '.cache'
+    cache.mkdir(exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='underhell-surface-destroy-', dir=cache) as tmp:
         tmp = Path(tmp)
         for name in ('src/core/android/SDL_android.c', 'src/video/android/SDL_androidevents.c'):
             out = tmp / name
             out.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(sdl / name, out)
-        subprocess.run(['git', 'apply', str(ROOT / 'scripts/experimental/sdl-underhell-vulkan.patch')], cwd=tmp, check=True)
+        spec = importlib.util.spec_from_file_location('runtime_build', ROOT / 'scripts/build-underhell-vulkan-runtime.py')
+        runtime = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(runtime)
+        patch = ROOT / 'scripts/experimental/sdl-underhell-vulkan.patch'
+        runtime.apply_patch(tmp, patch)
+        runtime.apply_patch(tmp, patch) # cached path must verify actual application too
         patched = (tmp / 'src/core/android/SDL_android.c').read_text()
         start = patched.index('{', patched.index('JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeSurfaceDestroyed)(JNIEnv *env, jclass jcls)\n{'))
         body = patched[start:patched.index('\n}', start) + 2]

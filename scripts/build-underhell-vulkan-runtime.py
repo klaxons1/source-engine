@@ -45,12 +45,20 @@ def checkout(name, url, revision, sparse=None):
 def apply_patch(source, patch):
     stamp = source / '.underhell-patch-sha256'
     digest = hashlib.sha256(patch.read_bytes()).hexdigest()
+    # SDL is a plain copy inside this repository's ignored cache. Without a
+    # ceiling git discovers the engine repo and can silently SKIP git-format
+    # patch paths while returning success. A dependency with its own .git (e.g.
+    # adrenotools) still uses that repository normally.
+    env = dict(os.environ, GIT_CEILING_DIRECTORIES=str(source.resolve().parent))
     if stamp.exists():
         if stamp.read_text().strip() != digest:
             raise RuntimeError('Stale patched source; use a new digest-keyed cache directory')
+        run('git', 'apply', '--reverse', '--check', patch, cwd=source, env=env)
         return
-    run('git', 'apply', '--check', patch, cwd=source)
-    run('git', 'apply', patch, cwd=source)
+    run('git', 'apply', '--check', patch, cwd=source, env=env)
+    run('git', 'apply', patch, cwd=source, env=env)
+    # Never stamp a skipped/partial application as a prepared dependency.
+    run('git', 'apply', '--reverse', '--check', patch, cwd=source, env=env)
     stamp.write_text(digest + '\n')
 
 
