@@ -63,6 +63,17 @@ def build(bld):
 
 	install_path = bld.env.LIBDIR
 
+	if bld.env.SAREK_SDK:
+		# Same Source/GNUSTL ABI as the companion, but its DX9 minimum is not
+		# compiled into this separately named, explicitly selected material system.
+		legacy = bld.env.derive()
+		legacy.append_unique('DEFINES', ['UNDERHELL_SAREK_DX6=1'])
+		bld.shlib(source=source + ['wireframe.cpp', 'sarek_dx6_identity.cpp'],
+			target='materialsystem_sarek_dx6', name='materialsystem_sarek_dx6',
+			env=legacy, features='c cxx', includes=includes, defines=defines,
+			use=libs + ['SDL2', 'ANDROID_SUPPORT'], linkflags=['-Wl,-Bsymbolic', '-Wl,--no-undefined'], install_path=install_path,
+			idx=bld.get_taskgen_count())
+
 	bld.shlib(
 		source   = source,
 		target   = PROJECT_NAME,

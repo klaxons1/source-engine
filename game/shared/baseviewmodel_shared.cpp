@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,6 +14,12 @@
 #include "prediction.h"
 #include "client_virtualreality.h"
 #include "sourcevr/isourcevirtualreality.h"
+#include "weapon_parse.h"
+#include "basecombatweapon_shared.h"
+#include "underhell/uh_freeaim.h"
+
+void ScreenToWorld( int mousex, int mousey, float fov, const Vector& vecRenderOrigin,
+	const QAngle& vecRenderAngles, Vector& vecPickingRay );
 #else
 #include "vguiscreen.h"
 #endif
@@ -44,6 +51,13 @@ CBaseViewModel::CBaseViewModel()
 	m_EntClientFlags |= ENTCLIENTFLAG_ALWAYS_INTERPOLATE;
 #endif
 	SetRenderColor( 255, 255, 255, 255 );
+
+	// Underhell ironsight interpolation (VDC "Adding Ironsights"). m_expFactor
+	// is declared unconditionally so the class layout matches the server; only
+	// the client reads it. m_bExpSighted is the networked target state the
+	// server toggles.
+	m_expFactor = 0.0f;
+	m_bExpSighted = false;
 
 	// View model of this weapon
 	m_sVMName			= NULL_STRING;		
@@ -84,6 +98,10 @@ void CBaseViewModel::Spawn( void )
 	Precache( );
 	SetSize( Vector( -8, -4, -2), Vector(8, 4, 2) );
 	SetSolid( SOLID_NONE );
+
+	// Underhell: reset ironsight interpolation on spawn (VDC "Adding Ironsights").
+	m_expFactor = 0.0f;
+	m_bExpSighted = false;
 }
 
 
@@ -382,52 +400,144 @@ void CBaseViewModel::SendViewModelMatchingSequence( int sequence )
 #include "ivieweffects.h"
 #endif
 
+//-----------------------------------------------------------------------------
+// Underhell ironsight (VDC "Adding Ironsights", jorg40/Cin).
+// Applies the active weapon's ExpOffset (position + orientation) to the
+// viewmodel's hip position so it lines up with the eye when ironsighted.
+//-----------------------------------------------------------------------------
+#if defined( CLIENT_DLL )
+static void UH_CalcExpWpnOffsets( CBasePlayer *owner, Vector &pos, QAngle &ang )
+{
+	if ( !owner )
+		return;
+
+	CBaseCombatWeapon *pWeapon = owner->GetActiveWeapon();
+	if ( !pWeapon )
+		return;
+
+	const FileWeaponInfo_t &info = pWeapon->GetWpnData();
+	if ( !info.m_bHasExpOffset )
+		return;
+
+	Vector forward, right, up;
+
+	// Orientation offset first, so the position offset is applied in the
+	// ironsighted reference frame.
+	ang += info.m_expOriOffset;
+
+	AngleVectors( ang, &forward, &right, &up );
+
+	pos += forward * info.m_expOffset.x;
+	pos += right   * info.m_expOffset.y;
+	pos += up      * info.m_expOffset.z;
+}
+#endif
+
 void CBaseViewModel::CalcViewModelView( CBasePlayer *owner, const Vector& eyePosition, const QAngle& eyeAngles )
 {
 	// UNDONE: Calc this on the server?  Disabled for now as it seems unnecessary to have this info on the server
 #if defined( CLIENT_DLL )
-	QAngle vmangoriginal = eyeAngles;
 	QAngle vmangles = eyeAngles;
 	Vector vmorigin = eyePosition;
-
 	CBaseCombatWeapon *pWeapon = m_hWeapon.Get();
-	//Allow weapon lagging
-	if ( pWeapon != NULL )
-	{
-#if defined( CLIENT_DLL )
-		if ( !prediction->InPrediction() )
-#endif
-		{
-			// add weapon-specific bob 
-			pWeapon->AddViewmodelBob( this, vmorigin, vmangles );
-#if defined ( CSTRIKE_DLL )
-			CalcViewModelLag( vmorigin, vmangles, vmangoriginal );
-#endif
-		}
-	}
-	// Add model-specific bob even if no weapon associated (for head bob for off hand models)
-	AddViewModelBob( owner, vmorigin, vmangles );
-#if !defined ( CSTRIKE_DLL )
-	// This was causing weapon jitter when rotating in updated CS:S; original Source had this in above InPrediction block  07/14/10
-	// Add lag
-	CalcViewModelLag( vmorigin, vmangles, vmangoriginal );
-#endif
 
-#if defined( CLIENT_DLL )
 	if ( !prediction->InPrediction() )
 	{
 		// Let the viewmodel shake at about 10% of the amplitude of the player's view
 		vieweffects->ApplyShake( vmorigin, vmangles, 0.1 );	
 	}
-#endif
 
+	// Preserve Source SDK 2013's VR transform before applying Underhell's
+	// viewmodel-specific offsets.
 	if( UseVR() )
 	{
 		g_ClientVirtualReality.OverrideViewModelTransform( vmorigin, vmangles, pWeapon && pWeapon->ShouldUseLargeViewModelVROverride() );
 	}
 
+	// Cliento sub_10014D80 treats the kick/leg viewmodel (index 2) separately:
+	// it may follow downward pitch, but upward pitch is clamped to level and it
+	// never enters the weapon ironsight/free-aim path.
+	if ( ViewModelIndex() == 2 )
+	{
+		if ( vmangles[PITCH] < 0.0f )
+			vmangles[PITCH] = 0.0f;
+		SetLocalOrigin( vmorigin );
+		SetLocalAngles( vmangles );
+		return;
+	}
+
+	// Underhell ironsight (VDC "Adding Ironsights", jorg40/Cin — matches the
+	// original client CalcViewModelView sub_10014D80):
+	//
+	// The original never applies CalcViewModelLag.  It applies weapon bob only
+	// later in the unsighted free-aim path, so the sighted gun remains stable.
+	// First apply the weapon's ExpOffset (position + orientation) to the hip
+	// origin and slide the viewmodel to the eye, driven by m_bExpSighted.
+#if defined( CLIENT_DLL )
+	if ( ViewModelIndex() != 1 )
+	{
+		UH_CalcExpWpnOffsets( owner, vmorigin, vmangles );
+
+	// Interpolate m_expFactor toward the target (1 = sighted, 0 = hip).
+	// The original is time-based ((curtime - m_fIronsightedTime) / gMoveTime,
+	// gMoveTime = 0.1); a per-frame lerp at the same rate is equivalent on the
+	// normal toggle path and avoids plumbing the player's toggle time into
+	// shared code.
+	float flTarget = m_bExpSighted ? 1.0f : 0.0f;
+	float flSpeed = 10.0f;	// 1 / gMoveTime(0.1)
+	if ( m_expFactor < flTarget )
+		m_expFactor = min( flTarget, m_expFactor + flSpeed * gpGlobals->frametime );
+	else if ( m_expFactor > flTarget )
+		m_expFactor = max( flTarget, m_expFactor - flSpeed * gpGlobals->frametime );
+
+	// Scale the offset from the hip position toward the eye position.
+	Vector difPos = vmorigin - eyePosition;
+	vmorigin = eyePosition + difPos * m_expFactor;
+	}
+
+	// sub_10014D80: hip-fire/free-aim is the only path which receives the
+	// active weapon's normal viewmodel bob.  The original calls the weapon's
+	// AddViewmodelBob virtual after calculating the free-aim ray, then replaces
+	// the bobbed angles with the ray angles; consequently walking moves the gun
+	// position slightly, but does not wobble the aim direction.
+	Vector2D vecCursor;
+	if ( !m_bExpSighted && UH_FreeAimGetCursor( vecCursor ) )
+	{
+		QAngle aimAngles = vmangles;
+		int nScreenWide = 0, nScreenTall = 0;
+		engine->GetScreenSize( nScreenWide, nScreenTall );
+		if ( nScreenWide > 0 && nScreenTall > 0 )
+		{
+			Vector vecPickingRay;
+			ScreenToWorld(
+				(int)( ( vecCursor.x * 0.25f + 0.5f ) * nScreenWide ),
+				(int)( ( vecCursor.y * 0.25f + 0.5f ) * nScreenTall ),
+				owner->GetFOV(), eyePosition, eyeAngles, vecPickingRay );
+			UH_FreeAimClampDirection( eyeAngles, vecPickingRay );
+			VectorAngles( vecPickingRay, aimAngles );
+		}
+
+		CBaseCombatWeapon *pWeapon = GetOwningWeapon();
+		if ( pWeapon && !prediction->InPrediction() )
+			pWeapon->AddViewmodelBob( this, vmorigin, vmangles );
+
+		vmangles = aimAngles;
+	}
+#endif
+
 	SetLocalOrigin( vmorigin );
 	SetLocalAngles( vmangles );
+
+#if defined( CLIENT_DLL )
+	// The original freezes ACT_VM_IDLE at cycle zero while sighted.  This is
+	// why the hip weapon retains its subtle authored idle movement whereas the
+	// sight picture is absolutely still (Cliento sub_10014D80).
+	if ( m_bExpSighted && GetOwningWeapon() &&
+		 GetSequenceActivity( GetSequence() ) == ACT_VM_IDLE )
+	{
+		SetCycle( 0.0f );
+	}
+#endif
 
 #ifdef SIXENSE
 	if( g_pSixenseInput->IsEnabled() && (owner->GetObserverMode()==OBS_MODE_NONE) && !UseVR() )
@@ -558,6 +668,7 @@ IMPLEMENT_NETWORKCLASS_ALIASED( BaseViewModel, DT_BaseViewModel )
 BEGIN_NETWORK_TABLE_NOBASE(CBaseViewModel, DT_BaseViewModel)
 #if !defined( CLIENT_DLL )
 	SendPropModelIndex(SENDINFO(m_nModelIndex)),
+	SendPropBool	(SENDINFO(m_bExpSighted)),
 	SendPropInt		(SENDINFO(m_nBody), 8),
 	SendPropInt		(SENDINFO(m_nSkin), 10),
 	SendPropInt		(SENDINFO(m_nSequence),	8, SPROP_UNSIGNED),
@@ -576,6 +687,7 @@ BEGIN_NETWORK_TABLE_NOBASE(CBaseViewModel, DT_BaseViewModel)
 	SendPropArray	(SendPropFloat(SENDINFO_ARRAY(m_flPoseParameter),	8, 0, 0.0f, 1.0f), m_flPoseParameter),
 #endif
 #else
+	RecvPropBool	(RECVINFO(m_bExpSighted)),
 	RecvPropInt		(RECVINFO(m_nModelIndex)),
 	RecvPropInt		(RECVINFO(m_nSkin)),
 	RecvPropInt		(RECVINFO(m_nBody)),
@@ -602,6 +714,7 @@ END_NETWORK_TABLE()
 BEGIN_PREDICTION_DATA( CBaseViewModel )
 
 	// Networked
+	DEFINE_PRED_FIELD( m_bExpSighted, FIELD_BOOLEAN, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_nModelIndex, FIELD_SHORT, FTYPEDESC_INSENDTABLE | FTYPEDESC_MODELINDEX ),
 	DEFINE_PRED_FIELD( m_nSkin, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),
 	DEFINE_PRED_FIELD( m_nBody, FIELD_INTEGER, FTYPEDESC_INSENDTABLE ),

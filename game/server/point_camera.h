@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -51,6 +52,8 @@ private:
 	CNetworkVar( float, m_flFogMaxDensity );
 	CNetworkVar( bool, m_bActive );
 	CNetworkVar( bool, m_bUseScreenAspectRatio );
+	CNetworkVar( int, m_iRenderTargetindex );
+	CNetworkVar( bool, m_bCustomTexture );
 
 	// Allows the mapmaker to control whether a camera is active or not
 	bool	m_bIsOn;

@@ -29,6 +29,9 @@
 #include "cam_thirdperson.h"
 #include "inputsystem/iinputsystem.h"
 #include "touch.h"
+#ifdef UNDERHELL
+#include "underhell/uh_freeaim.h"
+#endif
 
 // up / down
 #define	PITCH	0
@@ -104,6 +107,10 @@ void CInput::TouchMove( CUserCmd *cmd )
 
 	// Let the client mode at the mouse input before it's used
 	g_pClientMode->OverrideMouseInput( &dx, &dy );
+
+	#ifdef UNDERHELL
+	UH_FreeAimUpdateTouchCursor( dx, dy );
+	#endif
 
 	// Add mouse X/Y movement to cmd
 	ApplyTouch( viewangles, cmd, dx, dy );

@@ -956,6 +956,11 @@ void CShaderManager::Shutdown()
 //-----------------------------------------------------------------------------
 IShaderBuffer *CShaderManager::CompileShader( const char *pProgram, size_t nBufLen, const char *pShaderVersion )
 {
+#if defined(UNDERHELL_SAREK)
+    Warning("Sarek: runtime HLSL compilation is unavailable; use the shipped DX9 shader cache.\n");
+    return NULL;
+#else
+
 	int nCompileFlags = D3DXSHADER_AVOID_FLOW_CONTROL;
 
 #ifdef _DEBUG
@@ -987,6 +992,7 @@ IShaderBuffer *CShaderManager::CompileShader( const char *pProgram, size_t nBufL
 	}
 
 	return pShaderBuffer;
+#endif
 }
 
 

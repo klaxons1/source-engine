@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -31,6 +32,36 @@ ConVar cl_npc_speedmod_outtime( "cl_npc_speedmod_outtime", "1.5", FCVAR_CLIENTDL
 IMPLEMENT_CLIENTCLASS_DT(C_BaseHLPlayer, DT_HL2_Player, CHL2_Player)
 	RecvPropDataTable( RECVINFO_DT(m_HL2Local),0, &REFERENCE_RECV_TABLE(DT_HL2Local) ),
 	RecvPropBool( RECVINFO( m_fIsSprinting ) ),
+
+	// Underhell inventory props. Order must match the server send table
+	// (DT_HL2_Player) exactly — the engine matches tables by index.
+	RecvPropBool( RECVINFO( m_bShoulderFlashlight ) ),
+	RecvPropBool( RECVINFO( m_bFlashlightOn ) ),
+	RecvPropBool( RECVINFO( m_bInventoryEnabled ) ),
+	RecvPropInt( RECVINFO( m_iUHBatteryCount ) ),
+	RecvPropInt( RECVINFO( m_iUHHermitCardsCount ) ),
+	RecvPropInt( RECVINFO( m_iUHHermitCurrentQuestCount ) ),
+	RecvPropInt( RECVINFO( m_iUHHermitTotalQuestCount ) ),
+	RecvPropBool( RECVINFO( m_bDisplayHermitCard ) ),
+	RecvPropArray3( RECVINFO_ARRAY(m_iInventory), RecvPropInt( RECVINFO(m_iInventory[0]) ) ),
+
+	// Underhell endurance / hunger props (order mirrors the server send table).
+	RecvPropInt( RECVINFO( m_iEndurance ) ),
+	RecvPropInt( RECVINFO( m_iBleedCounter ) ),
+	RecvPropFloat( RECVINFO( m_flUHBatteryCharge ) ),
+	RecvPropBool( RECVINFO( m_bIronSighted ) ),
+	RecvPropFloat( RECVINFO( m_fIronsightedTime ) ),
+	RecvPropBool( RECVINFO( m_bHavePistolSilencer ) ),
+	RecvPropBool( RECVINFO( m_bHaveRifleSilencer ) ),
+	RecvPropBool( RECVINFO( m_bLaserToggleState ) ),
+	// Underhell kick marker (kick window active).
+	RecvPropBool( RECVINFO( m_bKickMarker ) ),
+	// Underhell night vision / gas mask active state (client overlay).
+	RecvPropBool( RECVINFO( m_bNightVisionOn ) ),
+	RecvPropBool( RECVINFO( m_bGasMaskOn ) ),
+	// Underhell second hand / left arm state.
+	RecvPropBool( RECVINFO( m_bLeftArmDeployed ) ),
+	RecvPropBool( RECVINFO( m_bHoldingFlare ) ),
 END_RECV_TABLE()
 
 BEGIN_PREDICTION_DATA( C_BaseHLPlayer )
@@ -66,6 +97,7 @@ C_BaseHLPlayer::C_BaseHLPlayer()
 	m_flZoomRate		= 0.0f;
 	m_flZoomStartTime	= 0.0f;
 	m_flSpeedMod		= cl_forwardspeed.GetFloat();
+	m_flUseReticleTime = -1.0f;
 }
 
 //-----------------------------------------------------------------------------
@@ -628,6 +660,11 @@ bool C_BaseHLPlayer::CreateMove( float flInputSampleTime, CUserCmd *pCmd )
 {
 	bool bResult = BaseClass::CreateMove( flInputSampleTime, pCmd );
 
+	// Original client stamps player+3456 every generated command while +use is
+	// held. The reticle reads this timestamp directly during Paint.
+	if ( pCmd->buttons & IN_USE )
+		m_flUseReticleTime = gpGlobals->curtime;
+
 	if ( !IsInAVehicle() )
 	{
 		PerformClientSideObstacleAvoidance( TICK_INTERVAL, pCmd );
@@ -637,13 +674,10 @@ bool C_BaseHLPlayer::CreateMove( float flInputSampleTime, CUserCmd *pCmd )
 	return bResult;
 }
 
-
-//-----------------------------------------------------------------------------
-// Purpose: Input handling
-//-----------------------------------------------------------------------------
+// Preserve the SDK 2013 first-person body transform. Underhell's player
+// networking and input additions do not replace this engine-facing behavior.
 void C_BaseHLPlayer::BuildTransformations( CStudioHdr *hdr, Vector *pos, Quaternion q[], const matrix3x4_t& cameraTransform, int boneMask, CBoneBitList &boneComputed )
 {
 	BaseClass::BuildTransformations( hdr, pos, q, cameraTransform, boneMask, boneComputed );
 	BuildFirstPersonMeathookTransformations( hdr, pos, q, cameraTransform, boneMask, boneComputed, "ValveBiped.Bip01_Head1" );
 }
-

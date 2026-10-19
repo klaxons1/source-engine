@@ -108,7 +108,9 @@ enum ImageFormat
 	NUM_IMAGE_FORMATS
 };
 
-#if defined( POSIX  ) || defined( DX_TO_GL_ABSTRACTION )
+#if defined(UNDERHELL_SAREK)
+#include "sarek_native.h"
+#elif defined( POSIX  ) || defined( DX_TO_GL_ABSTRACTION )
 typedef enum _D3DFORMAT
 	{
 		D3DFMT_INDEX16,

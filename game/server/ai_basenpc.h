@@ -1224,6 +1224,7 @@ public:
 	// local capabilities access
 	int					CapabilitiesAdd( int capabilities );
 	int					CapabilitiesRemove( int capabilities );
+	virtual bool		Weapon_CanUse( CBaseCombatWeapon *pWeapon );
 	void				CapabilitiesClear( void );
 
 private:
@@ -1860,13 +1861,62 @@ private:
 	CHandle<CAI_Hint>	m_pHintNode;				// this is the hint that the npc is moving towards or performing active idle on.
 
 public:
-	int					m_cAmmoLoaded;				// how much ammo is in the weapon (used to trigger reload anim sequences)
-	float				m_flDistTooFar;				// if enemy farther away than this, bits_COND_ENEMY_TOOFAR set in GatherEnemyConditions
-	string_t			m_spawnEquipment;
+	int						m_cAmmoLoaded;				// how much ammo is in the weapon (used to trigger reload anim sequences)
+	float					m_flDistTooFar;				// if enemy farther away than this, bits_COND_ENEMY_TOOFAR set in GatherEnemyConditions
+	string_t				m_spawnEquipment;
 
-	bool				m_fNoDamageDecal;
+	bool					m_fNoDamageDecal;
 
-	EHANDLE				m_hStoredPathTarget;		// For TASK_SET_GOAL
+	//-----------------------------------------------------------------------------
+	// Underhell AI + dismemberment (FGD BaseNPC + "Enemy AI Improvements" /
+	// "Bodygroups, Gibs, Ragdolls and Decals" tutorials). All are set from
+	// keyvalues and applied at Activate() / on damage.
+	//-----------------------------------------------------------------------------
+	string_t				m_uh_bodygroup;				// "uh_bodygroup" — "Helmet2Arms1Legs4" string parser
+	float					m_flUhFOV;					// "uh_fos" — field of view in degrees (-1 = unset)
+	float					m_flUhViewDistance;			// "uh_viewdistance" (-1 = unset)
+	bool					m_bUhSquadTemp;				// "squadtemp" — join temporary squads with allies in LOS
+	bool					m_bUhSpotBodies;			// "uh_spotbodies" — react to dead bodies
+	COutputEvent			m_OnSpotSoldierBody;		// fired when a soldier (npc_combine_s) body is spotted
+	COutputEvent			m_OnSpotInfectedBody;		// fired when an npc_infected body is spotted
+	COutputEvent			m_OnSpotDefaultBody;		// fired when any other NPC body is spotted
+
+	// Original Underhell dismemberment state.  The five counters are remaining
+	// part health, not accumulated damage; they are copied verbatim to the
+	// server ragdoll when this NPC dies.
+	bool					m_bUHGibable;
+	int						m_iUHGibType;				// original family/variant discriminator (0..8/10)
+	int						m_iUHPartHealth[5];		// head/left arm/right arm/left leg/right leg
+	int						m_iUHHelmetHealth;
+	unsigned int			m_nUHSeveredParts;		// bits 0=head, 1=LA, 2=RA, 3=LL, 4=RL
+	string_t				m_iszUHGibModel[4];		// left arm/right arm/left leg/right leg
+	float					m_flNextSpotBodiesTime;		// throttle the spot-bodies scan
+	float					m_flNextTempSquadTime;		// throttle the temp-squad scan
+
+	// Methods (implemented in underhell/uh_ai.cpp).
+	void					UH_ApplySpawnSettings( void );	// bodygroup string + FOV/view distance
+	void					UH_PrecacheGibModels( void );	// severed-limb + helmet models for this NPC's body
+	bool					UH_GibBodyPart( int iHitGroup, const Vector &vecPosition, const Vector &vecDir );
+	bool					UH_ConsiderGib( int iHitGroup, float flDamage, const Vector &vecPosition, const Vector &vecDir );
+	void					UH_ShootOffHelmet( const Vector &vecPosition, const Vector &vecDir );
+	void					UH_SpotBodiesThink( void );
+	void					UH_TempSquadUpdate( void );
+
+	// Inputs.
+	void					InputSetSquadTemp( inputdata_t &inputdata );
+	void					InputSetFos( inputdata_t &inputdata );
+	void					InputSetViewDistance( inputdata_t &inputdata );
+	void					InputSetSpotBodiesOn( inputdata_t &inputdata );
+	void					InputSetSpotBodiesOff( inputdata_t &inputdata );
+	void					InputRushEntity( inputdata_t &inputdata );
+	void					InputWalkToEntity( inputdata_t &inputdata );
+	void					InputGibHead( inputdata_t &inputdata );
+	void					InputGibLeftArm( inputdata_t &inputdata );
+	void					InputGibRightArm( inputdata_t &inputdata );
+	void					InputGibLeftLeg( inputdata_t &inputdata );
+	void					InputGibRightLeg( inputdata_t &inputdata );
+
+	EHANDLE					m_hStoredPathTarget;		// For TASK_SET_GOAL
 	Vector				m_vecStoredPathGoal;		//
 	GoalType_t			m_nStoredPathType;			// 
 	int					m_fStoredPathFlags;			//

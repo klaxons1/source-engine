@@ -1,0 +1,749 @@
+{
+  "repository": "https://github.com/klaxons1/source-sdk-2013-ce",
+  "branch": "arena/01a01580-source-sdk-2013-ce",
+  "base": "04e4870a110409bd285bc3817ccc0e52b259601f",
+  "head": "11117664a94b27df7cb05cec5ff82457c60126e5",
+  "commits": [
+    {
+      "sha": "d563c5da28d0b255a380ad07db93fa6af446f62c",
+      "subject": "Port Underhell reimplementation to Source SDK 2013"
+    },
+    {
+      "sha": "35ee5fa960e9931e7fa83e6cc8c662695974b2dd",
+      "subject": "Adapt Underhell fire, sprite, and viewmodel code to SDK 2013"
+    },
+    {
+      "sha": "5dd52ae65da7c5d572a598b0d2888030e6b0fc13",
+      "subject": "Restore SDK 2013 player transforms and link shader bridge"
+    },
+    {
+      "sha": "31d41f0e7769df78d4eef2b8ddede6f67c3b4f61",
+      "subject": "Add gameinfo for launching Underhell from current Half-Life 2"
+    },
+    {
+      "sha": "a6f4223f01c400499f9d335a2d6b18c24ef78900",
+      "subject": "Add SDK 2013-safe model blood decal materials"
+    },
+    {
+      "sha": "bf332dc9a9cab01d73b1e324805974c286a9f858",
+      "subject": "Prefer HL2 cinematic assets and quiet vehicle diagnostics"
+    },
+    {
+      "sha": "11117664a94b27df7cb05cec5ff82457c60126e5",
+      "subject": "Keep Underhell model blood decals resident in SDK 2013"
+    }
+  ],
+  "sources": [
+    {
+      "upstream": "sp/src/game/client/baseclientrendertargets.cpp",
+      "local": "game/client/baseclientrendertargets.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/baseclientrendertargets.h",
+      "local": "game/client/baseclientrendertargets.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_baseanimating.cpp",
+      "local": "game/client/c_baseanimating.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_baseentity.cpp",
+      "local": "game/client/c_baseentity.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_baseentity.h",
+      "local": "game/client/c_baseentity.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_baseplayer.cpp",
+      "local": "game/client/c_baseplayer.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_baseplayer.h",
+      "local": "game/client/c_baseplayer.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_impact_effects.cpp",
+      "local": "game/client/c_impact_effects.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_point_camera.cpp",
+      "local": "game/client/c_point_camera.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_point_camera.h",
+      "local": "game/client/c_point_camera.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_prop_vehicle.cpp",
+      "local": "game/client/c_prop_vehicle.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/c_prop_vehicle.h",
+      "local": "game/client/c_prop_vehicle.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/clientmode_shared.cpp",
+      "local": "game/client/clientmode_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/flashlighteffect.cpp",
+      "local": "game/client/flashlighteffect.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/hl2/c_basehlplayer.cpp",
+      "local": "game/client/hl2/c_basehlplayer.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/hl2/c_basehlplayer.h",
+      "local": "game/client/hl2/c_basehlplayer.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/hl2/c_te_flare.cpp",
+      "local": "game/client/hl2/c_te_flare.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/hl2/hud_suitpower.cpp",
+      "local": "game/client/hl2/hud_suitpower.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/hl2/hud_zoom.cpp",
+      "local": "game/client/hl2/hud_zoom.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/in_camera.cpp",
+      "local": "game/client/in_camera.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/in_mouse.cpp",
+      "local": "game/client/in_mouse.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/rendertexture.cpp",
+      "local": "game/client/rendertexture.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/rendertexture.h",
+      "local": "game/client/rendertexture.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/c_btbullet.cpp",
+      "local": "game/client/underhell/c_btbullet.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/c_inventory_panel.cpp",
+      "local": "game/client/underhell/c_inventory_panel.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/c_inventory_panel.h",
+      "local": "game/client/underhell/c_inventory_panel.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/c_uh_weapons.cpp",
+      "local": "game/client/underhell/c_uh_weapons.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_bleeding.cpp",
+      "local": "game/client/underhell/hud_bleeding.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_bleeding.h",
+      "local": "game/client/underhell/hud_bleeding.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_dotreticle.cpp",
+      "local": "game/client/underhell/hud_dotreticle.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_dotreticle.h",
+      "local": "game/client/underhell/hud_dotreticle.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_endurance.cpp",
+      "local": "game/client/underhell/hud_endurance.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_endurance.h",
+      "local": "game/client/underhell/hud_endurance.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_grenadeammo.cpp",
+      "local": "game/client/underhell/hud_grenadeammo.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_hermitcards.cpp",
+      "local": "game/client/underhell/hud_hermitcards.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_hermitcards.h",
+      "local": "game/client/underhell/hud_hermitcards.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_stamina.cpp",
+      "local": "game/client/underhell/hud_stamina.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_stamina.h",
+      "local": "game/client/underhell/hud_stamina.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_uhbattery.cpp",
+      "local": "game/client/underhell/hud_uhbattery.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/hud_uhbattery.h",
+      "local": "game/client/underhell/hud_uhbattery.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/shadereditor/README.md",
+      "local": "game/client/underhell/shadereditor/README.md",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/shadereditor/ivshadereditor.h",
+      "local": "game/client/underhell/shadereditor/ivshadereditor.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/shadereditor/uh_shadereditor_system.cpp",
+      "local": "game/client/underhell/shadereditor/uh_shadereditor_system.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/shadereditor/uh_shadereditor_system.h",
+      "local": "game/client/underhell/shadereditor/uh_shadereditor_system.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/uh_entglow.cpp",
+      "local": "game/client/underhell/uh_entglow.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/uh_freeaim.h",
+      "local": "game/client/underhell/uh_freeaim.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/uh_gear_overlay.cpp",
+      "local": "game/client/underhell/uh_gear_overlay.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/uh_ironsight.cpp",
+      "local": "game/client/underhell/uh_ironsight.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/underhell/uh_laser.cpp",
+      "local": "game/client/underhell/uh_laser.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/client/view.cpp",
+      "local": "game/client/view.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/view.h",
+      "local": "game/client/view.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/viewrender.cpp",
+      "local": "game/client/viewrender.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/client/viewrender.h",
+      "local": "game/client/viewrender.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/BasePropDoor.h",
+      "local": "game/server/BasePropDoor.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/EnvHudHint.cpp",
+      "local": "game/server/EnvHudHint.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/EnvMessage.cpp",
+      "local": "game/server/EnvMessage.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/EnvMessage.h",
+      "local": "game/server/EnvMessage.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/ai_activity.cpp",
+      "local": "game/server/ai_activity.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/ai_basenpc.cpp",
+      "local": "game/server/ai_basenpc.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/ai_basenpc.h",
+      "local": "game/server/ai_basenpc.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/ai_condition.h",
+      "local": "game/server/ai_condition.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/baseanimating.cpp",
+      "local": "game/server/baseanimating.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/basebludgeonweapon.cpp",
+      "local": "game/server/basebludgeonweapon.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/basebludgeonweapon.h",
+      "local": "game/server/basebludgeonweapon.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/baseentity.cpp",
+      "local": "game/server/baseentity.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/baseentity.h",
+      "local": "game/server/baseentity.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/client.cpp",
+      "local": "game/server/client.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/grenade_frag.h",
+      "local": "game/server/hl2/grenade_frag.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/hl2_player.cpp",
+      "local": "game/server/hl2/hl2_player.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/hl2_player.h",
+      "local": "game/server/hl2/hl2_player.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/item_ammo.cpp",
+      "local": "game/server/hl2/item_ammo.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/item_battery.cpp",
+      "local": "game/server/hl2/item_battery.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/item_healthkit.cpp",
+      "local": "game/server/hl2/item_healthkit.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/npc_combine.cpp",
+      "local": "game/server/hl2/npc_combine.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/npc_combines.cpp",
+      "local": "game/server/hl2/npc_combines.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/npc_combines.h",
+      "local": "game/server/hl2/npc_combines.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/npc_playercompanion.cpp",
+      "local": "game/server/hl2/npc_playercompanion.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/npc_playercompanion.h",
+      "local": "game/server/hl2/npc_playercompanion.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/vehicle_jeep.cpp",
+      "local": "game/server/hl2/vehicle_jeep.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/vehicle_jeep.h",
+      "local": "game/server/hl2/vehicle_jeep.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/weapon_flaregun.cpp",
+      "local": "game/server/hl2/weapon_flaregun.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/weapon_flaregun.h",
+      "local": "game/server/hl2/weapon_flaregun.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/weapon_frag.cpp",
+      "local": "game/server/hl2/weapon_frag.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/weapon_rpg.cpp",
+      "local": "game/server/hl2/weapon_rpg.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/hl2/weapon_rpg.h",
+      "local": "game/server/hl2/weapon_rpg.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/item_world.cpp",
+      "local": "game/server/item_world.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/items.h",
+      "local": "game/server/items.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/logicentities.cpp",
+      "local": "game/server/logicentities.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/monstermaker.cpp",
+      "local": "game/server/monstermaker.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/monstermaker.h",
+      "local": "game/server/monstermaker.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/physics_prop_ragdoll.cpp",
+      "local": "game/server/physics_prop_ragdoll.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/physics_prop_ragdoll.h",
+      "local": "game/server/physics_prop_ragdoll.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/player.cpp",
+      "local": "game/server/player.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/player.h",
+      "local": "game/server/player.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/point_camera.cpp",
+      "local": "game/server/point_camera.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/point_camera.h",
+      "local": "game/server/point_camera.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/props.cpp",
+      "local": "game/server/props.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/props.h",
+      "local": "game/server/props.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/sound.cpp",
+      "local": "game/server/sound.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/soundent.h",
+      "local": "game/server/soundent.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/npc_ace.cpp",
+      "local": "game/server/underhell/npc_ace.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/npc_butcher.cpp",
+      "local": "game/server/underhell/npc_butcher.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/npc_infected.cpp",
+      "local": "game/server/underhell/npc_infected.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_ai.cpp",
+      "local": "game/server/underhell/uh_ai.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_bullettime.cpp",
+      "local": "game/server/underhell/uh_bullettime.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_bullettime.h",
+      "local": "game/server/underhell/uh_bullettime.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_carry_ragdoll.cpp",
+      "local": "game/server/underhell/uh_carry_ragdoll.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_gear.cpp",
+      "local": "game/server/underhell/uh_gear.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_ironsight.cpp",
+      "local": "game/server/underhell/uh_ironsight.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_items.cpp",
+      "local": "game/server/underhell/uh_items.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_items.h",
+      "local": "game/server/underhell/uh_items.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_kick.cpp",
+      "local": "game/server/underhell/uh_kick.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_leftarm.cpp",
+      "local": "game/server/underhell/uh_leftarm.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_player_endurance.cpp",
+      "local": "game/server/underhell/uh_player_endurance.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_player_inventory.cpp",
+      "local": "game/server/underhell/uh_player_inventory.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_player_model.cpp",
+      "local": "game/server/underhell/uh_player_model.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_player_objectives.cpp",
+      "local": "game/server/underhell/uh_player_objectives.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_player_objectives.h",
+      "local": "game/server/underhell/uh_player_objectives.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_weapons.cpp",
+      "local": "game/server/underhell/uh_weapons.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/underhell/uh_weapons.h",
+      "local": "game/server/underhell/uh_weapons.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/server/vehicle_base.cpp",
+      "local": "game/server/vehicle_base.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/server/vehicle_base.h",
+      "local": "game/server/vehicle_base.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/activitylist.cpp",
+      "local": "game/shared/activitylist.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/ai_activity.h",
+      "local": "game/shared/ai_activity.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/basecombatweapon_shared.cpp",
+      "local": "game/shared/basecombatweapon_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/basecombatweapon_shared.h",
+      "local": "game/shared/basecombatweapon_shared.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/baseentity_shared.cpp",
+      "local": "game/shared/baseentity_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/baseviewmodel_shared.cpp",
+      "local": "game/shared/baseviewmodel_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/baseviewmodel_shared.h",
+      "local": "game/shared/baseviewmodel_shared.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/gamemovement.cpp",
+      "local": "game/shared/gamemovement.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/hl2/basehlcombatweapon_shared.cpp",
+      "local": "game/shared/hl2/basehlcombatweapon_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/hl2/basehlcombatweapon_shared.h",
+      "local": "game/shared/hl2/basehlcombatweapon_shared.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/shareddefs.h",
+      "local": "game/shared/shareddefs.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/underhell/uh_inventory.cpp",
+      "local": "game/shared/underhell/uh_inventory.cpp",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/shared/underhell/uh_inventory.h",
+      "local": "game/shared/underhell/uh_inventory.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/game/shared/vehicle_viewblend_shared.cpp",
+      "local": "game/shared/vehicle_viewblend_shared.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/weapon_parse.cpp",
+      "local": "game/shared/weapon_parse.cpp",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/game/shared/weapon_parse.h",
+      "local": "game/shared/weapon_parse.h",
+      "status": "M"
+    },
+    {
+      "upstream": "sp/src/public/avi/ibik.h",
+      "local": "public/avi/ibik.h",
+      "status": "A"
+    },
+    {
+      "upstream": "sp/src/public/haptics/haptic_utils.cpp",
+      "local": "public/haptics/haptic_utils.cpp",
+      "status": "M"
+    }
+  ],
+  "notes": [
+    "public/avi/ibik.h already exists in this engine; kept its native interface ABI.",
+    "VPC changes adapted to client_underhell.vpc and server_underhell.vpc using the local Episodic baseline.",
+    "SDK2013CE editor instructions and Windows build documentation were not imported as executable agent instructions.",
+    "Windows player animation state and PLAYER_MODEL deletions in this engine were preserved.",
+    "Case-sensitive includes corrected to the actual engine header names.",
+    "Android optional shader module resolves from native library directories, not Windows content DLLs.",
+    "max() uses the network variable integer value explicitly in InputBleedPlayer.",
+    "Added Android touch free-aim updates in in_touch.cpp, using scaled angular deltas without desktop sensitivity multiplication.",
+    "Replaced Windows-style unbounded swprintf HUD calls with V_swprintf_safe for Android Bionic compatibility."
+  ]
+}

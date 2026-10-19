@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -13,9 +14,9 @@
 #pragma once
 #endif
 
-#if _DEBUG
-extern bool g_bRenderingCameraView;		// For debugging (frustum fix for cameras)...
-#endif
+// Underhell uses this in release builds to mark monitor and reflective-glass
+// render-target passes (original client byte_10407398).
+extern bool g_bRenderingCameraView;
 
 class VMatrix;
 class Vector;

@@ -11,7 +11,7 @@
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(UNDERHELL_SAREK_DX6)
 DEFINE_FALLBACK_SHADER( Wireframe, Wireframe_DX6 )
 BEGIN_SHADER( Wireframe_DX6, 
 			  "Help for Wireframe_DX6" )

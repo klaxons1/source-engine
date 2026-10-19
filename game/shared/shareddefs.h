@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: Definitions that are shared by the game DLL and the client DLL.
 //
@@ -281,7 +282,7 @@ enum CastVote
 
 // Humans only have left and right hands, though we might have aliens with more
 //  than two, sigh
-#define MAX_VIEWMODELS			2
+#define MAX_VIEWMODELS			3	// Underhell: +1 for the kick viewmodel (index 2)
 
 #define MAX_BEAM_ENTS			10
 

@@ -27,6 +27,7 @@
 //===============================================================================
 
 #include "togles/rendermechanism.h"
+#include "uh_glsync.h"
 
 #ifndef _WIN32
 	#include <unistd.h>
@@ -251,7 +252,11 @@ bool	CGLMQuery::IsDone( void )
 			{
 #ifdef HAVE_GL_ARB_SYNC
 				if (gGL->m_bHave_GL_ARB_sync)
-					m_done = (gGL->glClientWaitSync( m_syncobj, 0, 0 ) == GL_ALREADY_SIGNALED);
+				{
+					GLenum status = gGL->glClientWaitSync(m_syncobj, 0, 0);
+					if (status == GL_WAIT_FAILED) Error("Underhell: glClientWaitSync poll failed");
+					m_done = UHGLFenceSignaled(status);
+				}
 				else 
 #endif
 				if ( m_name == 0 )
@@ -264,7 +269,7 @@ bool	CGLMQuery::IsDone( void )
 				if (m_done)
 				{
 					if (gGL->m_bHave_GL_ARB_sync)
-						{ /* no-op; we already know it's set to GL_ALREADY_SIGNALED. */ }
+						{ /* no-op; the sync was already observed signaled. */ }
 					else
 					{
 						if (gGL->m_bHave_GL_NV_fence)
@@ -314,15 +319,9 @@ void	CGLMQuery::Complete( uint *result )
 #ifdef HAVE_GL_ARB_SYNC				
 				if (gGL->m_bHave_GL_ARB_sync)
 				{
-					if (gGL->glClientWaitSync( m_syncobj, 0, 0 ) != GL_ALREADY_SIGNALED)
-					{
-						GLenum syncstate;
-						do {
-							const GLuint64 timeout = 10 * ((GLuint64)1000 * 1000 * 1000);  // 10 seconds in nanoseconds.
-							(void)timeout;
-							syncstate = gGL->glClientWaitSync( m_syncobj, GL_SYNC_FLUSH_COMMANDS_BIT, 0 );
-						} while (syncstate == GL_TIMEOUT_EXPIRED);  // any errors or success break out of this loop.
-					}
+					if (!UHGLWaitForFence([this](GLbitfield flags, GLuint64 timeout) {
+						return gGL->glClientWaitSync(m_syncobj, flags, timeout);
+					})) Error("Underhell: glClientWaitSync wait failed");
 				}
 				else
 #endif

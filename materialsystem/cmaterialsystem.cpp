@@ -58,7 +58,10 @@ ConVar mat_requires_rt_alloc_first( "mat_requires_rt_alloc_first", "0", FCVAR_HI
 // Make sure this convar gets created before videocfg.lib is initialized, so it can be driven by dxsupport.cfg
 static ConVar mat_tonemapping_occlusion_use_stencil( "mat_tonemapping_occlusion_use_stencil", "0" );
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined(UNDERHELL_SAREK_DX6)
+// Preserve the companion GL-layout ABI without its DX9-only ConVar clamp.
+static ConVar mat_dxlevel( "mat_dxlevel", "60", 0, "Experimental Source fixed-function Sarek profile", true, 60, true, 60, NULL );
+#elif defined(DX_TO_GL_ABSTRACTION)
 // In GL mode, we currently require mat_dxlevel to be between 90-92
 static ConVar mat_dxlevel( "mat_dxlevel", "92", 0, "", true, 90, true, 92, NULL );
 #else

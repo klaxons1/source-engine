@@ -29,6 +29,12 @@ class CShowPixelsParams;
 
 class CCocoaEvent;
 class CStackCrawlParams;
+#if defined(UNDERHELL_SAREK) && !defined(DX_TO_GL_ABSTRACTION)
+typedef void* PseudoGLContextPtr;
+class GLMDisplayDB;
+struct GLMRendererInfoFields;
+class CShowPixelsParams;
+#endif
 
 typedef struct SDL_Cursor SDL_Cursor;
 
@@ -74,7 +80,7 @@ public:
 	virtual void RenderedSize( uint &width, uint &height, bool set ) = 0;	// either set or retrieve rendered size value (from dxabstract)
 	virtual void DisplayedSize( uint &width, uint &height ) = 0;			// query backbuffer size (window size whether FS or windowed)
 	
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) || defined(UNDERHELL_SAREK)
 	virtual PseudoGLContextPtr	GetMainContext() = 0;
 	// Get the NSGLContext for a window's main view - note this is the carbon windowref as an argument
 	virtual PseudoGLContextPtr GetGLContextForWindow( void* windowref ) = 0;

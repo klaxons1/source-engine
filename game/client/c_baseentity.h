@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//===== Copyright � 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: A base class for the client-side representation of entities.
 //
@@ -35,6 +36,13 @@
 #include "particle_property.h"
 #include "toolframework/itoolentity.h"
 #include "tier0/threadtools.h"
+
+// Underhell: true while the reflective/refractive glass view is rendering.
+// Mirror-only entities (m_bIsMirrorOnly) are drawn only during this pass.
+extern bool g_bRenderingReflectiveGlass;
+// Underhell: master enable for mirror/monitor-only rendering (FCVAR_CHEAT).
+extern ConVar cl_player_render_mirror;
+extern ConVar cl_uh_render_debug;
 
 class C_Team;
 class IPhysicsObject;
@@ -1620,6 +1628,16 @@ private:
 	CNetworkVar( bool, m_bSimulatedEveryTick );
 	CNetworkVar( bool, m_bAnimatedEveryTick );
 	CNetworkVar( bool, m_bAlternateSorting );
+	// Underhell: mirror-only and L4D-style outline state.
+	CNetworkVar( bool, m_bIsMirrorOnly );
+	bool	m_bGlow;
+	color32	m_GlowColor;
+
+public:
+	bool	IsMirrorOnly( void ) const { return m_bIsMirrorOnly; }
+	bool	IsGlowEnabled( void ) const { return m_bGlow; }
+	const color32 &GetGlowColor( void ) const { return m_GlowColor; }
+private:
 
 	//Adrian
 	unsigned char					m_iTextureFrameIndex;

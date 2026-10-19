@@ -1130,6 +1130,16 @@ void CAI_BaseNPC::TraceAttack( const CTakeDamageInfo &info, const Vector &vecDir
 
 	CTakeDamageInfo subInfo = info;
 
+	// Original TraceAttack turns hits on an already absent arm into generic
+	// 0.01 damage instead of applying the arm multiplier again.
+	if ( m_bUHGibable &&
+		( ( ptr->hitgroup == HITGROUP_LEFTARM && ( m_nUHSeveredParts & ( 1u << 1 ) ) ) ||
+		  ( ptr->hitgroup == HITGROUP_RIGHTARM && ( m_nUHSeveredParts & ( 1u << 2 ) ) ) ) )
+	{
+		ptr->hitgroup = HITGROUP_GENERIC;
+		subInfo.SetDamage( 0.01f );
+	}
+
 	SetLastHitGroup( ptr->hitgroup );
 	m_nForceBone = ptr->physicsbone;		// save this bone for physics forces
 
@@ -1219,6 +1229,12 @@ void CAI_BaseNPC::TraceAttack( const CTakeDamageInfo &info, const Vector &vecDir
 	{
 		subInfo.SetInflictor( info.GetAttacker() );
 	}
+
+	// Underhell dismemberment: gib the struck limb once its threshold is met.
+	// Use the RAW damage (info.GetDamage()) — the uh_gibhealth / uh_headhealth
+	// values are "how much damage to inflict", compared against the weapon's
+	// damage before the per-hitgroup multiplier is applied.
+	UH_ConsiderGib( ptr->hitgroup, info.GetDamage(), ptr->endpos, vecDir );
 
 	AddMultiDamage( subInfo, this );
 }
@@ -2082,6 +2098,7 @@ void CAI_BaseNPC::OnListened()
 		COND_HEAR_PHYSICS_DANGER,
 		COND_HEAR_BULLET_IMPACT,
 		COND_HEAR_MOVE_AWAY,
+		COND_HEAR_FMRADIO,
 
 		COND_NO_HEAR_DANGER,
 
@@ -2126,7 +2143,8 @@ void CAI_BaseNPC::OnListened()
 				case SOUND_PHYSICS_DANGER:	condition = COND_HEAR_PHYSICS_DANGER;	break;
 				case SOUND_DANGER_SNIPERONLY:/* silence warning */					break;
 				case SOUND_MOVE_AWAY:		condition = COND_HEAR_MOVE_AWAY;		break;
-				case SOUND_PLAYER_VEHICLE:	condition = COND_HEAR_PLAYER;			break;
+				case SOUND_FMRADIO:		condition = COND_HEAR_FMRADIO;	break;
+				case SOUND_PLAYER_VEHICLE:	condition = COND_HEAR_PLAYER;		break;
 
 				default:
 					DevMsg( "**ERROR: NPC %s hearing sound of unknown type %d!\n", GetClassname(), pCurrentSound->SoundType() );
@@ -4173,6 +4191,8 @@ int CAI_BaseNPC::CapabilitiesGet( void ) const
 	{
 		capability |= GetActiveWeapon()->CapabilitiesGet();
 	}
+	if ( m_bUHGibable && ( m_nUHSeveredParts & ( 1u << 2 ) ) )
+		capability &= ~( bits_CAP_RANGE_ATTACK_GROUP | bits_CAP_AIM_GUN | bits_CAP_MOVE_SHOOT );
 	return capability;
 }
 
@@ -4190,6 +4210,13 @@ int CAI_BaseNPC::CapabilitiesRemove( int capability )
 	m_afCapability &= ~capability;
 
 	return m_afCapability;
+}
+
+bool CAI_BaseNPC::Weapon_CanUse( CBaseCombatWeapon *pWeapon )
+{
+	if ( m_bUHGibable && ( m_nUHSeveredParts & ( 1u << 2 ) ) )
+		return false;
+	return BaseClass::Weapon_CanUse( pWeapon );
 }
 
 // Clear capability mask
@@ -4749,6 +4776,10 @@ void CAI_BaseNPC::PrescheduleThink( void )
 #ifdef HL2_EPISODIC
 	CheckForScriptedNPCInteractions();
 #endif
+
+	// Underhell: spot dead bodies + temporary squads (throttled internals).
+	UH_SpotBodiesThink();
+	UH_TempSquadUpdate();
 
 	// If we use weapons, and our desired weapon state is not the current, fix it
 	if( (CapabilitiesGet() & bits_CAP_USE_WEAPONS) && (m_iDesiredWeaponState == DESIREDWEAPONSTATE_HOLSTERED || m_iDesiredWeaponState == DESIREDWEAPONSTATE_UNHOLSTERED || m_iDesiredWeaponState == DESIREDWEAPONSTATE_HOLSTERED_DESTROYED ) )
@@ -6859,7 +6890,23 @@ void CAI_BaseNPC::NPCInit ( void )
 	{	// Does this npc spawn with a weapon
 		if ( m_spawnEquipment != NULL_STRING && strcmp(STRING(m_spawnEquipment), "0"))
 		{
-			CBaseCombatWeapon *pWeapon = Weapon_Create( STRING(m_spawnEquipment) );
+		// Underhell: "additionalequipment" may be a comma-separated list of
+		// weapons; the NPC picks ONE at random (decode sub_10021CB0: strtok on
+		// "," then this[725] = items[rand % count]). Giving every weapon broke
+		// the "pick between these weapons" semantics of the FGD key.
+		CUtlVector<char *> items;
+		V_SplitString( STRING(m_spawnEquipment), ",", items );
+
+		const char *pszChosen = NULL;
+		if ( items.Count() > 0 )
+		{
+			int nPick = random->RandomInt( 0, items.Count() - 1 );
+			pszChosen = items[nPick];
+		}
+
+		if ( pszChosen && pszChosen[0] )
+		{
+			CBaseCombatWeapon *pWeapon = Weapon_Create( pszChosen );
 			if ( pWeapon )
 			{
 				// If I have a name, make my weapon match it with "_weapon" appended
@@ -6876,6 +6923,7 @@ void CAI_BaseNPC::NPCInit ( void )
 
 				Weapon_Equip( pWeapon );
 			}
+		}
 		}
 	}
 
@@ -10670,6 +10718,21 @@ BEGIN_DATADESC( CAI_BaseNPC )
 	DEFINE_FIELD( m_flTimeLastMovement,			FIELD_TIME ),
 	DEFINE_KEYFIELD(m_spawnEquipment,			FIELD_STRING, "additionalequipment" ),
   	DEFINE_FIELD( m_fNoDamageDecal,			FIELD_BOOLEAN ),
+
+	// Underhell AI + dismemberment fields.
+	DEFINE_KEYFIELD( m_uh_bodygroup,			FIELD_STRING, "uh_bodygroup" ),
+	DEFINE_KEYFIELD( m_flUhFOV,					FIELD_FLOAT,  "uh_fos" ),
+	DEFINE_KEYFIELD( m_flUhViewDistance,		FIELD_FLOAT,  "uh_viewdistance" ),
+	DEFINE_KEYFIELD( m_bUhSquadTemp,			FIELD_BOOLEAN, "squadtemp" ),
+	DEFINE_KEYFIELD( m_bUhSpotBodies,			FIELD_BOOLEAN, "uh_spotbodies" ),
+	DEFINE_FIELD( m_bUHGibable,				FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_iUHGibType,				FIELD_INTEGER ),
+	DEFINE_ARRAY( m_iUHPartHealth,			FIELD_INTEGER, 5 ),
+	DEFINE_FIELD( m_iUHHelmetHealth,		FIELD_INTEGER ),
+	DEFINE_FIELD( m_nUHSeveredParts,		FIELD_INTEGER ),
+	DEFINE_ARRAY( m_iszUHGibModel,			FIELD_STRING, 4 ),
+	DEFINE_FIELD( m_flNextSpotBodiesTime,		FIELD_TIME ),
+	DEFINE_FIELD( m_flNextTempSquadTime,		FIELD_TIME ),
   	DEFINE_FIELD( m_hStoredPathTarget,			FIELD_EHANDLE ),
 	DEFINE_FIELD( m_vecStoredPathGoal,		FIELD_POSITION_VECTOR ),
 	DEFINE_FIELD( m_nStoredPathType,			FIELD_INTEGER ),
@@ -10734,6 +10797,11 @@ BEGIN_DATADESC( CAI_BaseNPC )
 	DEFINE_OUTPUT( m_OnForcedInteractionAborted,	"OnForcedInteractionAborted" ),
 	DEFINE_OUTPUT( m_OnForcedInteractionFinished,	"OnForcedInteractionFinished" ),
 
+	// Underhell spot-bodies outputs.
+	DEFINE_OUTPUT( m_OnSpotSoldierBody,			"OnSpotSoldierBody" ),
+	DEFINE_OUTPUT( m_OnSpotInfectedBody,		"OnSpotInfectedBody" ),
+	DEFINE_OUTPUT( m_OnSpotDefaultBody,			"OnSpotDefaultBody" ),
+
 	// Inputs
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetRelationship", InputSetRelationship ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "SetEnemyFilter", InputSetEnemyFilter ),
@@ -10759,6 +10827,20 @@ BEGIN_DATADESC( CAI_BaseNPC )
 	DEFINE_INPUTFUNC( FIELD_VOID,	"UnholsterWeapon", InputUnholsterWeapon ),
 	DEFINE_INPUTFUNC( FIELD_STRING,	"ForceInteractionWithNPC", InputForceInteractionWithNPC ),
 	DEFINE_INPUTFUNC( FIELD_STRING, "UpdateEnemyMemory", InputUpdateEnemyMemory ),
+
+	// Underhell AI + dismemberment inputs.
+	DEFINE_INPUTFUNC( FIELD_STRING, "SetSquadTemp", InputSetSquadTemp ),
+	DEFINE_INPUTFUNC( FIELD_STRING, "SetFos", InputSetFos ),
+	DEFINE_INPUTFUNC( FIELD_STRING, "SetViewDistance", InputSetViewDistance ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "SetSpotBodiesOn", InputSetSpotBodiesOn ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "SetSpotBodiesOff", InputSetSpotBodiesOff ),
+	DEFINE_INPUTFUNC( FIELD_STRING, "RushEntity", InputRushEntity ),
+	DEFINE_INPUTFUNC( FIELD_STRING, "WalkToEntity", InputWalkToEntity ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "GibHead", InputGibHead ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "GibLeftArm", InputGibLeftArm ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "GibRightArm", InputGibRightArm ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "GibLeftLeg", InputGibLeftLeg ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "GibRightLeg", InputGibRightLeg ),
 
 	// Function pointers
 	DEFINE_USEFUNC( NPCUse ),
@@ -10852,6 +10934,9 @@ void CAI_BaseNPC::Activate( void )
 		ParseScriptedNPCInteractions();
 	}
 
+	// Underhell: apply "uh_bodygroup" + "uh_fos" + "uh_viewdistance".
+	UH_ApplySpawnSettings();
+
 	// Get a handle to my enemy filter entity if there is one.
 	if ( m_iszEnemyFilterName != NULL_STRING )
 	{
@@ -10874,8 +10959,23 @@ void CAI_BaseNPC::Precache( void )
 
 	if ( m_spawnEquipment != NULL_STRING && strcmp(STRING(m_spawnEquipment), "0") )
 	{
-		UTIL_PrecacheOther( STRING(m_spawnEquipment) );
+		// Underhell: "additionalequipment" may be a comma-separated list of
+		// weapons (e.g. "weapon_smg_mp5,weapon_smg_mp5_eod,..."). Precache each.
+		const char *pszEquipment = STRING( m_spawnEquipment );
+		CUtlVector<char *> items;
+		V_SplitString( pszEquipment, ",", items );
+		for ( int i = 0; i < items.Count(); i++ )
+		{
+			if ( items[i] && items[i][0] )
+			{
+				UTIL_PrecacheOther( items[i] );
+			}
+		}
 	}
+
+	// Underhell: precache the severed-limb + helmet models for this NPC's body
+	// (they are spawned dynamically on dismemberment / helmet loss).
+	UH_PrecacheGibModels();
 
 	// Make sure schedules are loaded for this NPC type
 	if (!LoadedSchedules())
@@ -11079,6 +11179,19 @@ void CAI_BaseNPC::OnRestore()
 	}
 	BaseClass::OnRestore();
 	m_bCheckContacts = true;
+
+	// Underhell: the base CBaseAnimating::OnRestore deliberately skips clamping
+	// m_nSequence when it is exactly -1 (it treats -1 as "no sequence yet").
+	// For an NPC that state is never valid — a restored -1 leaves the soldier
+	// frozen in the reference (T-)pose and spams "Bad sequence (-1 ...)" from
+	// GetSequenceLinearMotion. Re-resolve a valid sequence here.
+	if ( GetModelPtr() && ( GetSequence() < 0 || !IsValidSequence( GetSequence() ) ) )
+	{
+		int iSequence = SelectWeightedSequence( ACT_IDLE );
+		if ( iSequence == ACTIVITY_NOT_AVAILABLE )
+			iSequence = 0;
+		SetSequence( iSequence );
+	}
 }
 
 
@@ -11334,6 +11447,23 @@ CAI_BaseNPC::CAI_BaseNPC(void)
 	m_SquadName = NULL_STRING;
 	m_pEnemies					= new CAI_Enemies;
 	m_bIgnoreUnseenEnemies		= false;
+
+	// Underhell AI + dismemberment defaults.
+	m_uh_bodygroup				= NULL_STRING;
+	m_flUhFOV					= -1.0f;
+	m_flUhViewDistance			= -1.0f;
+	m_bUhSquadTemp				= true;		// temp squads on by default ("SquadTemp : 1")
+	m_bUhSpotBodies				= false;
+	m_bUHGibable					= false;
+	m_iUHGibType					= 0;
+	for ( int i = 0; i < 5; i++ )
+		m_iUHPartHealth[i]		= 0;
+	m_iUHHelmetHealth			= 0;
+	m_nUHSeveredParts			= 0;
+	for ( int i = 0; i < 4; i++ )
+		m_iszUHGibModel[i]		= NULL_STRING;
+	m_flNextSpotBodiesTime		= 0.0f;
+	m_flNextTempSquadTime		= 0.0f;
 	m_flEyeIntegRate			= 0.95;
 	SetTarget( NULL );
 

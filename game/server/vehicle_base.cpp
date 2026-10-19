@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: UNDONE: Rename this to prop_vehicle.cpp !!!
 //
@@ -325,6 +326,7 @@ IMPLEMENT_SERVERCLASS_ST(CPropVehicleDriveable, DT_PropVehicleDriveable)
 	SendPropInt(SENDINFO(m_bUnableToFire), 1, SPROP_UNSIGNED ),
 	SendPropVector(SENDINFO(m_vecEyeExitEndpoint), -1, SPROP_COORD),
 	SendPropBool(SENDINFO(m_bHasGun)),
+	SendPropBool(SENDINFO(m_bPlayerAtGun)),
 	SendPropVector(SENDINFO(m_vecGunCrosshair), -1, SPROP_COORD),
 END_SEND_TABLE();
 
@@ -335,6 +337,7 @@ BEGIN_DATADESC( CPropVehicleDriveable )
 	DEFINE_INPUTFUNC( FIELD_VOID, "TurnOn",	InputTurnOn ),
 	DEFINE_INPUTFUNC( FIELD_VOID, "TurnOff", InputTurnOff ),
 	DEFINE_INPUT( m_bHasGun, FIELD_BOOLEAN, "EnableGun" ),
+	DEFINE_INPUTFUNC( FIELD_VOID, "ToggleGunMode", InputToggleGunMode ),
 
 	// Outputs
 	DEFINE_OUTPUT( m_playerOn, "PlayerOn" ),
@@ -354,6 +357,7 @@ BEGIN_DATADESC( CPropVehicleDriveable )
 	DEFINE_FIELD( m_nScannerDisabledWeapons, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_nScannerDisabledVehicle, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_bUnableToFire, FIELD_BOOLEAN ),
+	DEFINE_FIELD( m_bPlayerAtGun, FIELD_BOOLEAN ),
 	DEFINE_FIELD( m_vecEyeExitEndpoint, FIELD_POSITION_VECTOR ),
 	DEFINE_FIELD( m_vecGunCrosshair, FIELD_VECTOR ),
 
@@ -384,6 +388,7 @@ CPropVehicleDriveable::CPropVehicleDriveable( void ) :
 {
 	m_vecEyeExitEndpoint.Init();
 	m_vecGunCrosshair.Init();
+	m_bPlayerAtGun = false;
 }
 
 //-----------------------------------------------------------------------------
@@ -565,9 +570,10 @@ void CPropVehicleDriveable::Use( CBaseEntity *pActivator, CBaseEntity *pCaller, 
 //-----------------------------------------------------------------------------
 CBaseEntity *CPropVehicleDriveable::GetDriver( void ) 
 { 
-	if ( m_hNPCDriver ) 
-		return m_hNPCDriver; 
-
+	// The player passenger and the NPC physics driver are independent in
+	// Underhell. Returning the NPC here makes the server vehicle believe its
+	// only passenger seat is occupied and also makes jeep aiming/damage use the
+	// hidden npc_vehicledriver instead of the gunner.
 	return m_hPlayer; 
 }
 
@@ -671,7 +677,13 @@ void CPropVehicleDriveable::DriveVehicle( float flFrameTime, CUserCmd *ucmd, int
 {
 	int iButtons = ucmd->buttons;
 
-	m_VehiclePhysics.UpdateDriverControls( ucmd, flFrameTime );
+	// Underhell: while the player is at the gun the vehicle self-drives via the
+	// "Throttle"/"HandBrake" inputs; do NOT let the (absent) player driving input
+	// stomp the scripted throttle (decode sub_103ED6A0: "if (!m_bPlayerAtGun)").
+	if ( !m_bPlayerAtGun )
+	{
+		m_VehiclePhysics.UpdateDriverControls( ucmd, flFrameTime );
+	}
 
 	m_nSpeed = m_VehiclePhysics.GetSpeed();	//send speed to client
 	m_nRPM = clamp( m_VehiclePhysics.GetRPM(), 0, 4095 );
@@ -780,6 +792,16 @@ void CPropVehicleDriveable::SetupMove( CBasePlayer *player, CUserCmd *ucmd, IMov
 }
 
 //-----------------------------------------------------------------------------
+// Purpose: Underhell — toggle the player between driving and gunning. While at
+// the gun the vehicle is self-driven via "Throttle"/"HandBrake" inputs and the
+// player's driving input is ignored (see DriveVehicle).
+//-----------------------------------------------------------------------------
+void CPropVehicleDriveable::InputToggleGunMode( inputdata_t &inputdata )
+{
+	m_bPlayerAtGun = !m_bPlayerAtGun;
+}
+
+//-----------------------------------------------------------------------------
 // Purpose: Prevent the player from entering / exiting the vehicle
 //-----------------------------------------------------------------------------
 void CPropVehicleDriveable::InputLock( inputdata_t &inputdata )
@@ -803,15 +825,15 @@ bool CPropVehicleDriveable::CanEnterVehicle( CBaseEntity *pEntity )
 	// Only drivers are supported
 	Assert( pEntity && pEntity->IsPlayer() );
 
-	// Prevent entering if the vehicle's being driven by an NPC
+	// m_hNPCDriver is a separate physics controller and does not occupy the
+	// player/gunner passenger slot.
 	if ( GetDriver() && GetDriver() != pEntity )
 		return false;
 
-	// Can't enter if we're upside-down
+	// Can't enter if we're upside-down.
 	if ( IsOverturned() )
 		return false;
 
-	// Prevent entering if the vehicle's locked, or if it's moving too fast.
 	return ( !m_bLocked && (m_nSpeed <= m_flMinimumSpeedToEnterExit) );
 }
 

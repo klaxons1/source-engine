@@ -148,6 +148,16 @@ static D3DDECLTYPE VertexElementToDeclType( VertexElement_t element, VertexCompr
 		}
 	}
 
+#ifdef UNDERHELL_SAREK
+	// The companion core/client were built with OPENGL_SWAP_COLORS: their
+	// color/specular bytes are RGBA, not D3D9's BGRA D3DCOLOR layout. Bone
+	// indices also use that shared packing; preserve D3DCOLORtoUBYTE4's shader
+	// swizzle rather than introducing a second hardware R/B swap.
+	if ( element == VERTEX_ELEMENT_COLOR || element == VERTEX_ELEMENT_SPECULAR
+		|| element == VERTEX_ELEMENT_BONEINDEX )
+		return D3DDECLTYPE_UBYTE4N;
+#endif
+
 	// Uncompressed-vertex element sizes
 	switch ( element )
 	{

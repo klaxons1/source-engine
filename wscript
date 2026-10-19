@@ -180,6 +180,14 @@ def define_platform(conf):
 	conf.env.DEDICATED = conf.options.DEDICATED
 	conf.env.TESTS = conf.options.TESTS
 	conf.env.TOGLES = conf.options.TOGLES
+	conf.env.SAREK_SDK = os.path.abspath(conf.options.SAREK_SDK) if conf.options.SAREK_SDK else ''
+	if conf.env.SAREK_SDK:
+		if conf.env.DEST_OS != 'android' or not conf.options.TOGLES:
+			conf.fatal('--sarek-sdk requires the Android GLES build; it ADDS a backend')
+		for required in ('libdxvk_sarek_d3d9.so', 'include/windows/windows.h', 'include/directx/d3d9.h'):
+			if not os.path.isfile(os.path.join(conf.env.SAREK_SDK, required)):
+				conf.fatal('Incomplete Sarek SDK: ' + required)
+
 	conf.env.GL = conf.options.GL and not conf.options.TESTS and not conf.options.DEDICATED
 	conf.env.OPUS = conf.options.OPUS
 
@@ -312,6 +320,9 @@ def options(opt):
 	grp.add_option('--disable-warns', action = 'store_true', dest = 'DISABLE_WARNS', default = False,
 		help = 'build using ccache [default: %default]')
 
+	grp.add_option('--sarek-sdk', dest='SAREK_SDK', default='',
+		help='Optional native Android ARM64 Sarek SDK directory (keeps GLES target)')
+
 	grp.add_option('--togles', action = 'store_true', dest = 'TOGLES', default = False,
 		help = 'build engine with ToGLES [default: %default]')
 
@@ -332,7 +343,9 @@ def options(opt):
 def check_deps(conf):
 	if conf.env.DEST_OS != 'win32':
 		conf.check_cc(lib='dl', mandatory=False)
-		conf.check_cc(lib='bz2', mandatory=True)
+		# Android uses the bundled bzip2; the NDK does not provide libbz2.
+		if conf.env.DEST_OS != 'android':
+			conf.check_cc(lib='bz2', mandatory=True)
 		conf.check_cc(lib='rt', mandatory=False)
 
 		if not conf.env.LIB_M: # HACK: already added in xcompile!
@@ -464,7 +477,7 @@ def configure(conf):
 	elif conf.env.GL:
 		projects['game'] += ['togl']
 
-	if conf.env.DEST_OS == 'win32':
+	if conf.env.DEST_OS in ['win32', 'android']:
 		projects['game'] += ['utils/bzip2']
 		projects['dedicated'] += ['utils/bzip2']
 	if conf.options.OPUS or conf.env.DEST_OS == 'android':
@@ -630,9 +643,12 @@ def build(bld):
 	if bld.env.DEST_OS in ['win32', 'android']:
 		sdl_name = 'SDL2.dll' if bld.env.DEST_OS == 'win32' else 'libSDL2.so'
 		sdl_path = os.path.join('lib', bld.env.DEST_OS, bld.env.DEST_CPU, sdl_name)
-		bld.install_files(bld.env.LIBDIR, [sdl_path])
+		if not (bld.env.DEST_OS == 'android' and bld.env.SAREK_SDK):
+			bld.install_files(bld.env.LIBDIR, [sdl_path])
+		# The Sarek build stages its owned ABI-compatible SDL; never overwrite it
+		# with the prebuilt EGL-only lifecycle while installing client/server.
 
-	if bld.env.DEST_OS == 'win32':
+	if bld.env.DEST_OS in ['win32', 'android']:
 		projects['game'] += ['utils/bzip2']
 		projects['dedicated'] += ['utils/bzip2']
 

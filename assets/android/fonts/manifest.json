@@ -1,0 +1,31 @@
+{
+  "repository": "matplotlib/matplotlib",
+  "revision": "4aeb773422464799998d900198b35cb80e94b3e1",
+  "files": {
+    "dejavusans.ttf": {
+      "source": "DejaVuSans.ttf",
+      "sha256": "3fdf69cabf06049ea70a00b5919340e2ce1e6d02b0cc3c4b44fb6801bd1e0d22"
+    },
+    "dejavusans-bold.ttf": {
+      "source": "DejaVuSans-Bold.ttf",
+      "sha256": "b184b89e3c1075f22f6b71575b6fc20d4972b3cfd3b23322ca6fd596dcaef167"
+    },
+    "dejavusans-oblique.ttf": {
+      "source": "DejaVuSans-Oblique.ttf",
+      "sha256": "ccdf74b350f11fd3dd5774de50e5e6346a1a5da1f5b7d5fb83590665e97a5213"
+    },
+    "dejavusans-boldoblique.ttf": {
+      "source": "DejaVuSans-BoldOblique.ttf",
+      "sha256": "6edf0283160186af451cbee71e7b845f2e4cabf264bb992ce668c83c25465e6f"
+    },
+    "LiberationMono-Regular.ttf": {
+      "source": "DejaVuSansMono.ttf",
+      "sha256": "602ec86b8948cfcd956482fe64f94c36c867770149ef2f791d4613f443bcecb3"
+    },
+    "LICENSE_DEJAVU.txt": {
+      "source": "LICENSE_DEJAVU",
+      "sha256": "d75938dec098f06f0ac3c00853065d94f020be1c3c62ef1dc2975ba15b4d9b0e"
+    }
+  },
+  "note": "Unmodified DejaVu Sans Mono is installed under LiberationMono-Regular.ttf as the legacy Courier New filename alias; font family/internal names unchanged."
+}

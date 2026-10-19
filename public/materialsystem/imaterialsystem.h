@@ -72,7 +72,10 @@ typedef uint64 VertexFormat_t;
 //                     very judiciously since we need to audit them when merging to SDK branch either way.
 #define MATERIAL_SYSTEM_INTERFACE_VERSION "VMaterialSystem081"
 
-#ifdef POSIX
+#if defined(UNDERHELL_SAREK_DX6)
+// Opt-in native legacy modules only; never lower the GLES/normal Sarek floor.
+#define ABSOLUTE_MINIMUM_DXLEVEL 60
+#elif defined(POSIX)
 #define ABSOLUTE_MINIMUM_DXLEVEL 90
 #else
 #define ABSOLUTE_MINIMUM_DXLEVEL 80
@@ -1053,7 +1056,7 @@ public:
 	// Contains context in so it can make decisions (i.e. if it's a model, ignore certain cheat parameters)
 	virtual IMaterial *			FindMaterialEx( char const* pMaterialName, const char *pTextureGroupName, int nContext, bool complain = true, const char *pComplainPrefix = NULL ) = 0;
 
-#ifdef DX_TO_GL_ABSTRACTION
+#if defined(DX_TO_GL_ABSTRACTION) || defined(UNDERHELL_SAREK_DX6)
 	virtual void				DoStartupShaderPreloading( void ) = 0;
 #endif	
 

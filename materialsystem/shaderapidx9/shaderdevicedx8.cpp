@@ -26,7 +26,7 @@
 #include "winutils.h"
 #include "tier0/vprof_telemetry.h"
 
-#if defined ( DX_TO_GL_ABSTRACTION )
+#if defined ( DX_TO_GL_ABSTRACTION ) && !defined( UNDERHELL_EMBEDDED_TOGL )
 // Placed here so inlines placed in dxabstract.h can access gGL
 COpenGLEntryPoints *gGL = NULL;
 #endif
@@ -189,7 +189,9 @@ bool CShaderDeviceMgrDx8::Connect( CreateInterfaceFn factory )
 	
 	mat_supports_d3d9ex.SetValue( bD3D9ExAvailable ? 1 : 0 );
 #else
-	#if defined( DO_DX9_HOOK )
+	#if defined(UNDERHELL_SAREK)
+		m_pD3D = DXVKSarekDirect3DCreate9(D3D_SDK_VERSION);
+	#elif defined( DO_DX9_HOOK )
 		m_pD3D = Direct3DCreate9Hook(D3D_SDK_VERSION);
 	#else
 		m_pD3D = Direct3DCreate9(D3D_SDK_VERSION);
@@ -1102,6 +1104,10 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 
 	// Compute the effective DX support level based on all the other caps
 	ComputeDXSupportLevel( *pCaps );
+#ifdef UNDERHELL_SAREK_DX6
+	// Keep the legacy module fixed at 60 even if video settings ask for DX9.
+	pCaps->m_nMaxDXSupportLevel = 60;
+#endif
 	int nCmdlineMaxDXLevel = CommandLine()->ParmValue( "-maxdxlevel", 0 );
 	if ( IsOpenGL() && ( nCmdlineMaxDXLevel > 0 ) )
 	{
@@ -1486,6 +1492,11 @@ int CShaderDeviceMgrDx8::GetVidMemBytes( int nAdapter ) const
 {
 #if defined( _X360 )
 	return 256*1024*1024;
+#elif defined(UNDERHELL_SAREK)
+	// WMI does not exist on Android. Query the actual selected Vulkan adapter's
+	// device-local budget (advertised heap size when budget is unavailable).
+	uint64 nBytes = DXVKSarekGetAdapterMemoryBytes(D3D(), nAdapter);
+	return nBytes > INT_MAX ? INT_MAX : (int)nBytes;
 #elif defined (DX_TO_GL_ABSTRACTION)
 	D3DADAPTER_IDENTIFIER9 devIndentifier;
 	D3D()->GetAdapterIdentifier( nAdapter, D3DENUM_WHQL_LEVEL, &devIndentifier );
@@ -1765,6 +1776,11 @@ void CShaderDeviceDx8::SetPresentParameters( void* hWnd, int nAdapter, const Sha
 		m_PresentParameters.BackBufferCount = 1;
 	}
 
+#ifdef UNDERHELL_SAREK
+	// Android/SDL owns immersive fullscreen, not D3D exclusive mode switching.
+	m_PresentParameters.Windowed = TRUE;
+	m_PresentParameters.FullScreen_RefreshRateInHz = 0;
+#endif
 	if ( info.m_nAASamples > 0 && ( m_PresentParameters.SwapEffect == D3DSWAPEFFECT_DISCARD ) )
 	{
 		D3DMULTISAMPLE_TYPE multiSampleType = ComputeMultisampleType( info.m_nAASamples );
@@ -2262,6 +2278,11 @@ IDirect3DDevice9* CShaderDeviceDx8::InvokeCreateDevice( void* hWnd, int nAdapter
 	}
 
 	// Otherwise we failed, show a message and shutdown
+#ifdef UNDERHELL_SAREK
+	DWarning( "init", 0, "Failed to create DXVK-Sarek / Vulkan device!\nError 0x%lX.\n"
+		"See *_d3d9.log in the game resource root for the Android WSI / Vulkan error.\n",
+		(unsigned long)(uint32_t)hr );
+#else
 	if ( pszMoreInfo )
 	{
 		DWarning( "init", 0, "Failed to create %s device!\nError 0x%lX: %s\n\nPlease see the following for more info.\n"
@@ -2272,6 +2293,7 @@ IDirect3DDevice9* CShaderDeviceDx8::InvokeCreateDevice( void* hWnd, int nAdapter
 		DWarning( "init", 0, "Failed to create %s device!\nError 0x%lX.\n\nPlease see the following for more info.\n"
 			"http://support.steampowered.com/cgi-bin/steampowered.cfg/php/enduser/std_adp.php?p_faqid=772\n", IsOpenGL() ? "OpenGL" : "D3D", hr );
 	}
+#endif // UNDERHELL_SAREK
 
 	return NULL;
 }
@@ -3601,7 +3623,10 @@ void CShaderDeviceDx8::DestroyPixelShader( PixelShaderHandle_t hShader )
 	ShaderManager()->DestroyPixelShader( hShader );
 }
 
-#ifdef DX_TO_GL_ABSTRACTION
+#ifdef UNDERHELL_SAREK_DX6
+// Retain the companion's GL-layout vtable slot, but never preload GL shaders.
+void CShaderDeviceDx8::DoStartupShaderPreloading( void ) {}
+#elif defined(DX_TO_GL_ABSTRACTION)
 void CShaderDeviceDx8::DoStartupShaderPreloading( void )
 {
 	ShaderManager()->DoStartupShaderPreloading();

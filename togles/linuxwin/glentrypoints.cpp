@@ -40,6 +40,10 @@
 #include "tier1/convar.h"
 #include "vstdlib/cvar.h"
 #include "inputsystem/ButtonCode.h"
+#ifdef UNDERHELL_EMBEDDED_TOGL
+#include "SDL.h"
+#include "uh_astc.h"
+#endif
 #include "tier1.h"
 #include "tier2/tier2.h"
 
@@ -173,6 +177,16 @@ void ClearOpenGLEntryPoints()
 		gGL->ClearEntryPoints();
 	}
 }
+#ifdef UNDERHELL_EMBEDDED_TOGL
+static void *UnderhellGLProc(const char *name, bool &okay, const bool required, void *fallback)
+{
+    void *p = SDL_GL_GetProcAddress(name);
+    if (!p) p = fallback;
+    okay = p != NULL; // GLES: a missing optional function must not poison later lookups.
+    if (required && !okay) Error("Underhell renderer: missing GL entry point %s", name);
+    return p;
+}
+#endif
 COpenGLEntryPoints *ToGLConnectLibraries( CreateInterfaceFn factory )
 {
 	ConnectTier1Libraries( &factory, 1 );
@@ -191,11 +205,21 @@ COpenGLEntryPoints *ToGLConnectLibraries( CreateInterfaceFn factory )
 		g_pLauncherMgr = (ILauncherMgr *)factory( SDLMGR_INTERFACE_VERSION, NULL );
 	#endif
 
+#ifdef UNDERHELL_EMBEDDED_TOGL
+    // CreateSDLMgr() constructs a hidden window/context BEFORE shaderapi Connect.
+    // Do not reuse the companion's gGL: it belongs to another renderer module.
+    if (!SDL_GL_GetCurrentContext()) Error("Underhell renderer: no current SDL GL context");
+    GetOpenGLEntryPoints(UnderhellGLProc);
+    Msg("UNDERHELL_RENDERER_ASTC_V1: private TOGLES shaderapi connected\n");
+#endif
 	return gGL;
 }
 
 void ToGLDisconnectLibraries()
 {
+#ifdef UNDERHELL_EMBEDDED_TOGL
+    UHASTCShutdown();
+#endif
 	DisconnectTier2Libraries();
 	ConVar_Unregister();
 	DisconnectTier1Libraries();

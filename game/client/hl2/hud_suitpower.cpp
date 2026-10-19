@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -20,7 +21,10 @@ using namespace vgui;
 // memdbgon must be the last include file in a .cpp file!!!
 #include "tier0/memdbgon.h"
 
-DECLARE_HUDELEMENT( CHudSuitPower );
+// Underhell: the vanilla HL2 suit-power ("stamina") bar is replaced by the
+// Underhell CHudStamina (game/client/underhell/hud_stamina.cpp). The element
+// is intentionally NOT registered so a single stamina bar is shown.
+// DECLARE_HUDELEMENT( CHudSuitPower );
 
 #define SUITPOWER_INIT -1
 

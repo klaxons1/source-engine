@@ -1,4 +1,5 @@
 //========= Copyright Valve Corporation, All rights reserved. ============//
+//========= Copyright � 1996-2005, Valve Corporation, All rights reserved. ============//
 //
 // Purpose: 
 //
@@ -37,6 +38,8 @@ public:
 	float			GetFogMaxDensity();
 	float			GetFogEnd();
 	bool			UseScreenAspectRatio() const { return m_bUseScreenAspectRatio; }
+	bool			UsesCustomRenderTarget() const { return m_bCustomTexture; }
+	int				GetRenderTargetIndex() const { return m_iRenderTargetindex; }
 
 	virtual void	GetToolRecordingState( KeyValues *msg );
 
@@ -50,6 +53,8 @@ private:
 	float m_flFogMaxDensity;
 	bool m_bActive;
 	bool m_bUseScreenAspectRatio;
+	int m_iRenderTargetindex;
+	bool m_bCustomTexture;
 
 public:
 	C_PointCamera	*m_pNext;

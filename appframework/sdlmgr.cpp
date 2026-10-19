@@ -518,7 +518,7 @@ InitReturnVal_t CSDLMgr::Init()
 		if (SDL_Init(SDL_INIT_VIDEO) == -1)
 			Error( "SDL_Init(SDL_INIT_VIDEO) failed: %s", SDL_GetError() );
 
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
 		if ( CommandLine()->FindParm( "-gl_debug" ) )
 		{
 			SDL_GL_SetAttribute( SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_DEBUG_FLAG );
@@ -595,6 +595,7 @@ InitReturnVal_t CSDLMgr::Init()
 	memset(m_pixelFormatAttribs, '\0', sizeof (m_pixelFormatAttribs));
 
 	int *attCursor = m_pixelFormatAttribs;
+#ifndef UNDERHELL_VULKAN_LAUNCHER
 
 #define SET_GL_ATTR(key,value) \
 	*(attCursor++) = (int) (key); \
@@ -669,6 +670,7 @@ InitReturnVal_t CSDLMgr::Init()
 	SET_GL_ATTR(SDL_GL_ACCELERATED_VISUAL, 1);
 
 	#undef SET_GL_ATTR
+#endif // !UNDERHELL_VULKAN_LAUNCHER
 
 	m_pixelFormatAttribCount = (attCursor - &m_pixelFormatAttribs[0]) / 2;
 
@@ -724,7 +726,9 @@ void CSDLMgr::Shutdown()
 		DestroyGameWindow();
 	}
 
+	#ifndef UNDERHELL_VULKAN_LAUNCHER
 	SDL_GL_UnloadLibrary();
+	#endif
 	SDL_QuitSubSystem(SDL_INIT_VIDEO);
 }
 
@@ -804,7 +808,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	m_bFullScreen = false;
 	sdl_displayindex_fullscreen.SetValue( -1 );
 
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
 	// Set up GL context...
 	const int *attrib = m_pixelFormatAttribs;
 	for (int i = 0; i < m_pixelFormatAttribCount; i++, attrib += 2)
@@ -817,13 +821,23 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	int x = SDL_WINDOWPOS_CENTERED;
 	int y = SDL_WINDOWPOS_CENTERED;
 	int flags = SDL_WINDOW_HIDDEN;
-#if defined( DX_TO_GL_ABSTRACTION )
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	// Merely omitting OPENGL is not enough: SDL defaults Android windows to
+	// OPENGL when no graphics flag is set, claiming the Surface for EGL.
+	// Mark this window explicitly Vulkan so Sarek can own the Surface.
+	flags |= SDL_WINDOW_VULKAN;
+#elif defined( DX_TO_GL_ABSTRACTION )
 	flags |= SDL_WINDOW_OPENGL;
 #endif
 	m_Window = SDL_CreateWindow( pTitle, x, y, width, height, flags );
 
 	if (m_Window == NULL)
 		Error( "Failed to create SDL window: %s", SDL_GetError() );
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	if ( SDL_GetWindowFlags( m_Window ) & SDL_WINDOW_OPENGL )
+		Error( "Sarek requires a Vulkan SDL window, but SDL selected OpenGL/EGL" );
+	Msg( "Underhell Sarek: SDL Vulkan window created without EGL.\n" );
+#endif
 	SetAssertDialogParent( m_Window );
 
 #ifdef OSX
@@ -848,7 +862,7 @@ bool CSDLMgr::CreateHiddenGameWindow( const char *pTitle, int width, int height 
 	}
 #endif
 
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
 	m_GLContext = SDL_GL_CreateContext(m_Window);
 	if (m_GLContext == NULL)
 		Error( "Failed to create GL context: %s", SDL_GetError() );
@@ -949,6 +963,9 @@ PseudoGLContextPtr	CSDLMgr::GetMainContext()
 
 PseudoGLContextPtr CSDLMgr::CreateExtraContext()
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	return NULL;
+#endif
 	SDLAPP_FUNC;
 
 	const int *attrib = m_pixelFormatAttribs;
@@ -960,6 +977,9 @@ PseudoGLContextPtr CSDLMgr::CreateExtraContext()
 
 void CSDLMgr::DeleteContext( PseudoGLContextPtr hContext )
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	return;
+#endif
 	SDLAPP_FUNC;
 	Assert( (SDL_GLContext)hContext != m_GLContext );
 	
@@ -976,6 +996,9 @@ void CSDLMgr::DeleteContext( PseudoGLContextPtr hContext )
 
 bool CSDLMgr::MakeContextCurrent( PseudoGLContextPtr hContext )
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	return hContext == NULL;
+#endif
 	SDLAPP_FUNC;
 
 	// We only ever have one GL context on Linux at the moment, so don't spam these calls.
@@ -1185,6 +1208,9 @@ void CSDLMgr::OnFrameRendered()
 #if defined( DX_TO_GL_ABSTRACTION )
 void CSDLMgr::ShowPixels( CShowPixelsParams *params )
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	return;
+#endif
 	SDLAPP_FUNC;
 	
 	tmZone( TELEMETRY_LEVEL0, TMZF_NONE, __FUNCTION__ );
@@ -1566,7 +1592,7 @@ void CSDLMgr::SizeWindow( int width, int tall )
 
 	SDL_SetWindowSize( m_Window, width, tall );
 
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
 	gGL->glViewport(0, 0, (GLsizei) width, (GLsizei) tall);
 	gGL->glScissor( 0,0, (GLsizei) width, (GLsizei) tall );
 #endif
@@ -2013,7 +2039,7 @@ void CSDLMgr::DecWindowRefCount()
 
 	if ( !m_nWindowRefCount )
 	{
-#if defined( DX_TO_GL_ABSTRACTION )
+#if defined( DX_TO_GL_ABSTRACTION ) && !defined(UNDERHELL_VULKAN_LAUNCHER)
 		if ( m_Window )
 		{
 			SDL_GL_MakeCurrent( m_Window, m_GLContext );
@@ -2171,6 +2197,12 @@ void CSDLMgr::SetGammaRamp( const uint16 *pRed, const uint16 *pGreen, const uint
 #if defined( DX_TO_GL_ABSTRACTION )
 void CSDLMgr::GetDesiredPixelFormatAttribsAndRendererInfo( uint **ptrOut, uint *countOut, GLMRendererInfoFields *rendInfoOut )
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	if (ptrOut) *ptrOut = NULL;
+	if (countOut) *countOut = 0;
+	if (rendInfoOut) memset(rendInfoOut, 0, sizeof(*rendInfoOut));
+	return;
+#endif
 	SDLAPP_FUNC;
 
 	Assert( m_pixelFormatAttribCount > 0 );
@@ -2222,6 +2254,9 @@ void GLMDisplayMode::Dump( int which )
 
 GLMDisplayDB *CSDLMgr::GetDisplayDB( void )
 {
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	return NULL;
+#endif
 	SDLAPP_FUNC;
 
 	if ( !m_displayDB )

@@ -1,3 +1,15 @@
+# Underhell for Android
+
+This branch builds an Android mod launcher named `underhell`, using the exact
+lowercase `underhell` content directory and the ported Underhell client/server.
+See [Android setup, content case checks, build and known limitations](docs/underhell/ANDROID.md).
+
+The launcher requires the companion Source Engine app and separately supplied
+Underhell/HL2 resources. The imported reimplementation is not certified 1:1;
+see the documented Shader Editor limitation before treating this as a release.
+
+---
+
 # MEOW :3
 [![GitHub Actions Status](https://github.com/nillerusr/source-engine/actions/workflows/build.yml/badge.svg)](https://github.com/nillerusr/source-engine/actions/workflows/build.yml) [![GitHub Actions Status](https://github.com/nillerusr/source-engine/actions/workflows/tests.yml/badge.svg)](https://github.com/nillerusr/source-engine/actions/workflows/tests.yml)
  Discord: [![Discord Server](https://img.shields.io/discord/672055862608658432.svg)](https://discord.gg/hZRB7WMgGw)
