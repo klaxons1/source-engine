@@ -13,6 +13,43 @@ ANDROID = "{http://schemas.android.com/apk/res/android}"
 ASSETS = Path(__file__).resolve().parent.parent / "assets/android"
 
 
+def prepare_sdl_activity(java):
+    """Patch our APK copy, never the pinned SDL checkout or companion app."""
+    # MotionEvent coordinates are View-local, not Surface-buffer pixels.
+    for axis, dimension in (("X", "Width"), ("Y", "Height")):
+        old = "event.get" + axis + "(i) / m" + dimension
+        if java.count(old) != 3:
+            raise ValueError("Pinned SDL touch normalization contract changed")
+        java = java.replace(old, "event.get" + axis + "(i) / Math.max(1, v.get" + dimension + "())")
+    replacements = [
+        ("public boolean mIsSurfaceReady;", "public volatile boolean mIsSurfaceReady;"),
+        # Keep SDL's original getter: surfaceCreated must fetch its window BEFORE
+        # surfaceChanged publishes readiness. Only Sarek uses the gated getter.
+        ("    // Input\n", """    // Render-thread getter, separate from SDL's surfaceCreated handshake.
+    public static Surface getNativeSurfaceIfReady() {
+        SDLSurface surface = SDLActivity.mSurface;
+        return surface != null && surface.mIsSurfaceReady ? surface.getNativeSurface() : null;
+    }
+
+    // Input
+"""),
+        # Close the provider before nativePause can block the UI thread.
+        ("""        // Transition to pause, if needed
+        SDLActivity.mNextNativeState = SDLActivity.NativeState.PAUSED;
+        SDLActivity.handleNativeState();
+
+        mIsSurfaceReady = false;""", """        mIsSurfaceReady = false;
+        // Transition to pause, if needed
+        SDLActivity.mNextNativeState = SDLActivity.NativeState.PAUSED;
+        SDLActivity.handleNativeState();"""),
+    ]
+    for old, new in replacements:
+        if java.count(old) != 1:
+            raise ValueError("Pinned SDL Surface readiness contract changed")
+        java = java.replace(old, new, 1)
+    return java
+
+
 def prepare(launcher):
     android = launcher / "android"
     # Only known template inputs or our already-prepared outputs are accepted.
@@ -87,13 +124,7 @@ def prepare(launcher):
     for helper in sdl_java.rglob("*.java"):
         java = helper.read_text(encoding="utf-8")
         if helper.name == "SDLActivity.java":
-            # MotionEvent coordinates are View-local pixels. Surface buffer size
-            # can differ on Vulkan (fixed buffers, cutout, compositor scaling).
-            for axis, dimension in (("X", "Width"), ("Y", "Height")):
-                old = "event.get" + axis + "(i) / m" + dimension
-                if java.count(old) != 3:
-                    raise ValueError("Pinned SDL touch normalization contract changed")
-                java = java.replace(old, "event.get" + axis + "(i) / Math.max(1, v.get" + dimension + "())")
+            java = prepare_sdl_activity(java)
         changes[android / "src" / helper.relative_to(sdl_java)] = java
 
 

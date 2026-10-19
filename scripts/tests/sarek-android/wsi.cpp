@@ -6,6 +6,9 @@
 #include <memory>
 #include <cstring>
 #include <iostream>
+#include <vector>
+#include <chrono>
+#include "util/log/log.h"
 #include "../../../launcher/android/sarek_surface_state.h"
 extern "C" bool DXVKSarekSetAndroidDisplay(uint32_t, uint32_t, uint32_t, uint32_t);
 extern "C" int32_t ANativeWindow_getWidth(ANativeWindow* w) { return w->width; }
@@ -18,7 +21,18 @@ static ANativeWindow window{1920, 1080}, replacement{2400, 1080};
 static ANativeWindow* expectedWindow = &window;
 static ANativeWindow* providerWindow;
 static int token;
-static ANativeWindow* provide(void* hwnd) { assert(hwnd == &token); return providerWindow; }
+static int unavailableCalls;
+static ANativeWindow* provide(void* hwnd) {
+  assert(hwnd == &token);
+  if (unavailableCalls > 0) { --unavailableCalls; return nullptr; }
+  return providerWindow;
+}
+static std::vector<std::string> messages;
+namespace dxvk {
+  void Logger::err(const std::string& s) { messages.push_back(s); }
+  void Logger::warn(const std::string& s) { messages.push_back(s); }
+  void Logger::info(const std::string& s) { messages.push_back(s); }
+}
 static VkResult surfaceResult = VK_SUCCESS;
 static int surfaceCalls;
 static VKAPI_ATTR VkResult VKAPI_CALL createSurface(VkInstance, const VkAndroidSurfaceCreateInfoKHR* info,
@@ -114,9 +128,29 @@ int main() {
   assert(width == 2400 && height == 1080 && releases == 3);
   assert(driver->createSurface(&token, getProc, VK_NULL_HANDLE, &surface) == VK_SUCCESS);
   androidReleaseSurface(surface); assert(releases == 4);
-  providerWindow = nullptr;
+  // Readiness recovery: transient NULL must not reach Vulkan or poison D3D9
+  // initialization, and every acquired reference must still be balanced.
+  unavailableCalls = 3;
+  int callsBefore = surfaceCalls;
+  assert(driver->createSurface(&token, getProc, VK_NULL_HANDLE, &surface) == VK_SUCCESS);
+  assert(!unavailableCalls && surfaceCalls == callsBefore + 1 && releases == 4);
+  assert(messages.back().find("became ready") != std::string::npos);
+  androidReleaseSurface(surface); assert(releases == 5);
+  // An actual driver failure is NOT retried, and its acquired window is released.
+  surfaceResult = VK_ERROR_SURFACE_LOST_KHR;
   assert(driver->createSurface(&token, getProc, VK_NULL_HANDLE, &surface) == VK_ERROR_SURFACE_LOST_KHR);
-  assert(surface == VK_NULL_HANDLE && releases == 4);
+  assert(surfaceCalls == callsBefore + 2 && releases == 6 && surface == VK_NULL_HANDLE);
+  assert(messages.back().find("rejected an acquired native window") != std::string::npos);
+  surfaceResult = VK_SUCCESS;
+  providerWindow = nullptr;
+  auto start = std::chrono::steady_clock::now();
+  callsBefore = surfaceCalls;
+  assert(driver->createSurface(&token, getProc, VK_NULL_HANDLE, &surface) == VK_ERROR_SURFACE_LOST_KHR);
+  auto elapsed = std::chrono::steady_clock::now() - start;
+  assert(elapsed >= std::chrono::seconds(2));
+  assert(surface == VK_NULL_HANDLE && releases == 6 && surfaceCalls == callsBefore);
+  assert(messages.back().find("provider returned NULL") != std::string::npos);
+  assert(messages.back().find("was NOT called") != std::string::npos);
   driver->getWindowSize(&token, &width, &height); assert(!width && !height);
   DXVKSarekSetAndroidWindowProvider(nullptr);
   assert(dxvk::str::fromws(dxvk::str::tows(u8"Underhell — Привет").c_str()) == u8"Underhell — Привет");

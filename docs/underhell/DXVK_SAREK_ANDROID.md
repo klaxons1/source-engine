@@ -322,3 +322,43 @@ Launcher Java tests exercise checkbox-on/off, quote preservation and conflicting
 DX-level sanitization. APK checks reject missing, wrong-ABI or wrong-identity
 legacy modules and compare them with the staged outputs. These are build/CPU
 checks, not a claim of Android GPU validation.
+
+### Surface-not-ready diagnostics (including Pixel 6 / Mali-G78)
+
+A reported Pixel 6 log reaches Vulkan device creation, then repeatedly fails
+initial Android WSI Surface creation. The old combined `native window /
+vkCreateAndroidSurfaceKHR failed` message did **not** identify whether the Java
+provider returned NULL or Vulkan rejected an acquired window. Missing optional
+GPU features in that log do not establish the cause of this Surface failure.
+
+The owned SDL Java copy now publishes a volatile Surface-ready flag, closes it
+before the destroy/pause handshake, and exposes a separate ready-only getter for
+Sarek. SDL's original getter remains ungated for `surfaceCreated`, which runs
+before readiness. Vulkan destruction skips the EGL-only backup wait and notifies
+the host of Surface loss. GLES keeps its EGL backup/wait behavior.
+
+WSI Surface creation waits at most two seconds for an unavailable provider,
+re-querying every 10 ms on the render thread only. Provider queries and UI/SDL
+callbacks never wait or call SDL window APIs. Actual Vulkan creation errors are
+returned immediately, **not** retried or reported as successful presentation.
+A failed Presenter constructor also releases its Surface/window lease after
+swapchain setup fails, so later device attempts do not inherit that lease.
+
+New DXVK log messages distinguish:
+
+* `native window unavailable (provider returned NULL); ... was NOT called`:
+  readiness/lifecycle or JNI bridge issue, not a Vulkan creation failure;
+* `vkCreateAndroidSurfaceKHR rejected an acquired native window (...)`:
+  Vulkan really was called; the actual result and window extent are included;
+* `Failed to create swap chain, VkResult=...`: Surface creation passed, but the
+  subsequent swapchain stage failed.
+
+Android logcat tag `UnderhellVulkan` additionally reports activity transitions
+and changes in window availability (paused, SDL not ready, invalid Surface, JNI
+error, ready generation/extent), without emitting a message for every frame.
+Host tests execute the patched SDL destroy body and staged Java getters against
+mocks, including old-code negative controls, plus WSI recovery/timeout/driver
+failure and reference-ownership tests under ASan/UBSan. These changes address
+lifecycle defects; **the Pixel 6 black screen is not device-verified as fixed**.
+On Mali select the system Vulkan driver, not an Adreno Turnip ZIP. Test ordinary
+Sarek first with the optional DX6 graphics checkbox off.

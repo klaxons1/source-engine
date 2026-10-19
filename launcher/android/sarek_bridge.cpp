@@ -19,26 +19,42 @@ static SDL_SpinLock surfaceStateLock;
 static SarekSurfaceState surfaceState;
 static std::atomic<bool> activityResumed{false};
 
+enum WindowReadState { WINDOW_READY, ACTIVITY_PAUSED, HOST_NOT_READY, NO_JNI,
+    SURFACE_NOT_READY, INVALID_SURFACE, JNI_ERROR, NO_NATIVE_WINDOW };
+static std::atomic<int> lastWindowReadState{-1};
+static ANativeWindow* windowReadResult(WindowReadState state, ANativeWindow* window = NULL, int generation = 0) {
+    if (lastWindowReadState.exchange(state) != state) {
+        static const char* reasons[] = {"ready", "activity paused", "host not configured", "no JNI environment",
+            "SDL Surface not ready", "Surface.isValid=false", "JNI exception", "ANativeWindow_fromSurface returned NULL"};
+        __android_log_print(ANDROID_LOG_INFO, "UnderhellVulkan", "Native window: %s (generation=%d, %dx%d)",
+            reasons[state], generation, window ? ANativeWindow_getWidth(window) : 0,
+            window ? ANativeWindow_getHeight(window) : 0);
+    }
+    return window;
+}
+
 // SDL can call this with Android_ActivityMutex held. Only use Java Surface /
 // ANativeWindow APIs here, never SDL_GetWindowWMInfo or SDL window operations.
 static ANativeWindow* readWindow(void* hwnd, int* generation) {
-    if (!activityResumed.load() || !hwnd || !hostClass || !getSurface || !surfaceIsValid || !surfaceGeneration) return NULL;
+    if (!activityResumed.load()) return windowReadResult(ACTIVITY_PAUSED);
+    if (!hwnd || !hostClass || !getSurface || !surfaceIsValid || !surfaceGeneration) return windowReadResult(HOST_NOT_READY);
     JNIEnv* env = static_cast<JNIEnv*>(SDL_AndroidGetJNIEnv());
-    if (!env) return NULL;
+    if (!env) return windowReadResult(NO_JNI);
     jobject surface = env->CallStaticObjectMethod(hostClass, getSurface);
-    if (env->ExceptionCheck()) { env->ExceptionClear(); return NULL; }
-    bool valid = surface && env->CallBooleanMethod(surface, surfaceIsValid);
+    if (env->ExceptionCheck()) { env->ExceptionClear(); return windowReadResult(JNI_ERROR); }
+    if (!surface) return windowReadResult(SURFACE_NOT_READY);
+    bool valid = env->CallBooleanMethod(surface, surfaceIsValid);
     if (valid && !env->ExceptionCheck() && generation) *generation = env->CallIntMethod(surface, surfaceGeneration);
     ANativeWindow* window = valid && !env->ExceptionCheck() ? ANativeWindow_fromSurface(env, surface) : NULL;
-    if (surface) env->DeleteLocalRef(surface);
+    env->DeleteLocalRef(surface);
     if (env->ExceptionCheck()) {
         env->ExceptionClear();
         if (window) ANativeWindow_release(window);
-        return NULL;
+        return windowReadResult(JNI_ERROR);
     }
-    return window; // acquired; Sarek WSI releases after using it
+    return windowReadResult(window ? WINDOW_READY : valid ? NO_NATIVE_WINDOW : INVALID_SURFACE,
+        window, generation ? *generation : 0); // acquired; released by Sarek WSI
 }
-
 
 static bool observeWindow(ANativeWindow* window, int generation, bool initializeOnly) {
     int width = window ? ANativeWindow_getWidth(window) : 0;
@@ -91,7 +107,7 @@ Java_me_nillerusr_UnderhellSarekActivity_configureNative(JNIEnv* env, jclass cla
         fail("Invalid actual Android display metadata"); return;
     }
     hostClass = static_cast<jclass>(env->NewGlobalRef(clazz));
-    getSurface = env->GetStaticMethodID(clazz, "getNativeSurface", "()Landroid/view/Surface;");
+    getSurface = env->GetStaticMethodID(clazz, "getNativeSurfaceIfReady", "()Landroid/view/Surface;");
     jclass surfaceClass = env->FindClass("android/view/Surface");
     surfaceIsValid = surfaceClass ? env->GetMethodID(surfaceClass, "isValid", "()Z") : NULL;
     surfaceGeneration = surfaceClass ? env->GetMethodID(surfaceClass, "getGenerationId", "()I") : NULL;
@@ -103,7 +119,7 @@ Java_me_nillerusr_UnderhellSarekActivity_configureNative(JNIEnv* env, jclass cla
     auto registerCallback = sdl ? reinterpret_cast<RegisterSurfaceCallback>(dlsym(sdl, "SDL_UnderhellSetSurfaceCallback")) : NULL;
     if (!registerCallback) { fail("Owned Vulkan SDL lifecycle is missing; refusing EGL fallback"); return; }
     registerCallback(surfaceChanged);
-    __android_log_print(ANDROID_LOG_INFO, "UnderhellVulkan", "Sarek native host: %dx%d %.3f Hz", width, height, refreshMilliHz / 1000.0);
+    __android_log_print(ANDROID_LOG_INFO, "UnderhellVulkan", "Sarek native host (ready-surface-v2): %dx%d %.3f Hz", width, height, refreshMilliHz / 1000.0);
 }
 
 extern "C" __attribute__((used, visibility("default"))) const char UnderhellSarekLauncher[] = "UNDERHELL_SAREK_LAUNCHER_V1";
@@ -111,7 +127,10 @@ extern "C" __attribute__((used, visibility("default"))) const char UnderhellSare
 extern "C" __attribute__((visibility("default"))) JNIEXPORT void JNICALL
 Java_me_nillerusr_UnderhellSarekActivity_nativeSetResumed(JNIEnv*, jclass, jboolean resumed) {
     bool active = resumed == JNI_TRUE;
-    if (activityResumed.exchange(active) != active) DXVKSarekNotifyAndroidSurface();
+    if (activityResumed.exchange(active) != active) {
+        DXVKSarekNotifyAndroidSurface();
+        __android_log_print(ANDROID_LOG_INFO, "UnderhellVulkan", "Activity resumed=%s", active ? "true" : "false");
+    }
 }
 
 extern "C" __attribute__((visibility("default"))) JNIEXPORT jintArray JNICALL

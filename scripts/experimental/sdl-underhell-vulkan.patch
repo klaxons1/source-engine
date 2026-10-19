@@ -1,6 +1,8 @@
+diff --git a/src/core/android/SDL_android.c b/src/core/android/SDL_android.c
+index 47e1ed6..be224a4 100644
 --- a/src/core/android/SDL_android.c
 +++ b/src/core/android/SDL_android.c
-@@ -996,6 +996,12 @@
+@@ -996,6 +996,12 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeSurfaceCreated)(JNIEnv *env, j
      SDL_UnlockMutex(Android_ActivityMutex);
  }
  
@@ -13,7 +15,7 @@
  /* Called from surfaceChanged() */
  JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeSurfaceChanged)(JNIEnv *env, jclass jcls)
  {
-@@ -1007,10 +1013,11 @@
+@@ -1007,10 +1013,11 @@ JNIEXPORT void JNICALL SDL_JAVA_INTERFACE(onNativeSurfaceChanged)(JNIEnv *env, j
          SDL_WindowData  *data  = (SDL_WindowData *) Android_Window->driverdata;
  
          /* If the surface has been previously destroyed by onNativeSurfaceDestroyed, recreate it here */
@@ -26,9 +28,28 @@
          /* GL Context handling is done in the event loop because this function is run from the Java thread */
      }
  
+@@ -1032,7 +1039,7 @@ retry:
+         SDL_WindowData  *data  = (SDL_WindowData *) Android_Window->driverdata;
+ 
+         /* Wait for Main thread being paused and context un-activated to release 'egl_surface' */
+-        if (! data->backup_done) {
++        if ((Android_Window->flags & SDL_WINDOW_OPENGL) && !data->backup_done) {
+             nb_attempt -= 1;
+             if (nb_attempt == 0) {
+                 SDL_SetError("Try to release egl_surface with context probably still active");
+@@ -1053,6 +1060,7 @@ retry:
+             data->native_window = NULL;
+         }
+ 
++        if (underhell_surface_callback) underhell_surface_callback();
+         /* GL Context handling is done in the event loop because this function is run from the Java thread */
+     }
+ 
+diff --git a/src/video/android/SDL_androidevents.c b/src/video/android/SDL_androidevents.c
+index 4124cac..9bb53c5 100644
 --- a/src/video/android/SDL_androidevents.c
 +++ b/src/video/android/SDL_androidevents.c
-@@ -71,7 +71,7 @@
+@@ -71,7 +71,7 @@ android_egl_context_restore(SDL_Window *window)
      if (window) {
          SDL_Event event;
          SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
@@ -37,7 +58,7 @@
              /* The context is no longer valid, create a new one */
              data->egl_context = (EGLContext) SDL_GL_CreateContext(window);
              SDL_GL_MakeCurrent(window, (SDL_GLContext) data->egl_context);
-@@ -88,9 +88,11 @@
+@@ -88,9 +88,11 @@ android_egl_context_backup(SDL_Window *window)
      if (window) {
          /* Keep a copy of the EGL Context so we can try to restore it when we resume */
          SDL_WindowData *data = (SDL_WindowData *) window->driverdata;
