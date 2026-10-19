@@ -28,8 +28,15 @@
 //-----------------------------------------------------------------------------
 // Helper macro for vertex shaders
 //-----------------------------------------------------------------------------
+#ifdef UNDERHELL_SAREK_DX6
+// The legacy files use these macro names, but all their drawing helpers live
+// in CBaseShader. Do not pull BaseVSShader.cpp / compiled VS/PS binaries into FF.
+#define BEGIN_VS_SHADER_FLAGS(_name, _help, _flags) __BEGIN_SHADER_INTERNAL(CBaseShader, _name, _help, _flags)
+#define BEGIN_VS_SHADER(_name, _help) __BEGIN_SHADER_INTERNAL(CBaseShader, _name, _help, 0)
+#else
 #define BEGIN_VS_SHADER_FLAGS(_name, _help, _flags)	__BEGIN_SHADER_INTERNAL( CBaseVSShader, _name, _help, _flags )
 #define BEGIN_VS_SHADER(_name,_help)	__BEGIN_SHADER_INTERNAL( CBaseVSShader, _name, _help, 0 )
+#endif
 
 
 // useful parameter initialization macro

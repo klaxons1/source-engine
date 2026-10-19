@@ -1104,6 +1104,10 @@ bool CShaderDeviceMgrDx8::ComputeCapsFromD3D( HardwareCaps_t *pCaps, int nAdapte
 
 	// Compute the effective DX support level based on all the other caps
 	ComputeDXSupportLevel( *pCaps );
+#ifdef UNDERHELL_SAREK_DX6
+	// Keep the legacy module fixed at 60 even if video settings ask for DX9.
+	pCaps->m_nMaxDXSupportLevel = 60;
+#endif
 	int nCmdlineMaxDXLevel = CommandLine()->ParmValue( "-maxdxlevel", 0 );
 	if ( IsOpenGL() && ( nCmdlineMaxDXLevel > 0 ) )
 	{

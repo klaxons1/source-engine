@@ -35,8 +35,18 @@ public final class UnderhellVulkanSettingsActivity extends Activity {
         RadioButton gles = new RadioButton(this); gles.setId(1); gles.setText("GLES (TOGLES)"); renderers.addView(gles);
         RadioButton sarek = new RadioButton(this); sarek.setId(2); sarek.setText("Vulkan — DXVK-Sarek (Android 8+ / ARM64)"); renderers.addView(sarek);
         renderers.check(prefs.getString("underhell_renderer", "gles").equals("sarek") ? 2 : 1);
-        renderers.setOnCheckedChangeListener((group, id) -> prefs.edit().putString("underhell_renderer", id == 2 ? "sarek" : "gles").apply());
         body.addView(renderers);
+        CheckBox dx6 = new CheckBox(this);
+        dx6.setText("DX6-графика через Sarek (экспериментально)");
+        dx6.setChecked(prefs.getBoolean("underhell_sarek_dx6", false));
+        dx6.setEnabled(renderers.getCheckedRadioButtonId() == 2);
+        dx6.setOnCheckedChangeListener((button, checked) -> prefs.edit().putBoolean("underhell_sarek_dx6", checked).apply());
+        renderers.setOnCheckedChangeListener((group, id) -> {
+            prefs.edit().putString("underhell_renderer", id == 2 ? "sarek" : "gles").apply();
+            dx6.setEnabled(id == 2);
+        });
+        body.addView(dx6);
+        text("DX6: старые fixed-function шейдеры Source через D3D9/Vulkan, НЕ D7VK. Упрощает материалы и отключает современные эффекты; ускорение не гарантируется. Только для Sarek, нужен полный выход из игры. Снятие галочки возвращает обычный Sarek.");
         text("Разрешение Sarek: высота рендера, ширина по пропорциям Surface. Настройки Source Engine сюда не переносятся. Явные -w/-h в аргументах имеют приоритет.");
         Spinner resolution = new Spinner(this);
         final int[] heights = {720, 1080, 0};

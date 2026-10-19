@@ -7,7 +7,9 @@
 
 #include "BaseVSShader.h"
 #include "convar.h"
-#include "d3dx.h"
+#ifndef UNDERHELL_SAREK_DX6
+#include "d3dx.h" // unused by the fixed-function drawing path
+#endif
 
 DEFINE_FALLBACK_SHADER( Portal, Portal_DX60 )
 

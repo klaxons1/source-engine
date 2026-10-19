@@ -99,6 +99,7 @@ class LauncherTests(unittest.TestCase):
             self.assertEqual((self.android / "assets/licenses" / notice.name).read_bytes(), notice.read_bytes())
         self.assertIn('putExtra( "argv", argv )', java)
         self.assertIn('putExtra("render_height", mPref.getInt("underhell_render_height", 720))', java)
+        self.assertIn('putExtra("dx6", mPref.getBoolean("underhell_sarek_dx6", false))', java)
         staged_sdl = (self.android / "src/org/libsdl/app/SDLActivity.java").read_text()
         pristine_sdl = (ROOT / "thirdparty/SDL-src/android-project/app/src/main/java/org/libsdl/app/SDLActivity.java").read_text()
         for axis, dimension in (("X", "Width"), ("Y", "Height")):
@@ -137,7 +138,7 @@ class LauncherTests(unittest.TestCase):
         launcher = root / "srceng-mod-launcher"
         launcher.mkdir()
         shutil.copytree(self.android, launcher / "android")
-        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "test-underhell-launch-contract.py", "test-underhell-fonts.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
+        for name in ("build-apk.sh", "prepare-underhell-launcher.py", "verify-underhell-apk.py", "underhell_dx6.py", "test-underhell-launch-contract.py", "test-underhell-fonts.py", "build-underhell-touch-assets.py", "tests-underhell-touch.py"):
             shutil.copy2(ROOT / "scripts" / name, root / "scripts" / name)
         shutil.copytree(ROOT / "assets", root / "assets")
         sdl_java = Path("thirdparty/SDL-src/android-project/app/src/main/java")
@@ -279,6 +280,8 @@ class ApkIdentityTests(unittest.TestCase):
         libraries["lib/arm64-v8a/libshaderapidx9_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_SHADERAPI_V1")
         libraries["lib/arm64-v8a/liblauncher_sarek.so"] = elf_fixture(b"UNDERHELL_SAREK_LAUNCHER_V1")
         libraries["assets/underhell-vulkan.json"] = json.dumps(runtime).encode()
+        for name, marker in apk_check.DX6_MODULES.items():
+            libraries["lib/arm64-v8a/lib" + name + ".so"] = elf_fixture(marker)
         for font in (ROOT / "assets/android/fonts").iterdir():
             if font.is_file(): libraries["assets/fonts/" + font.name] = font.read_bytes()
         libraries["classes.dex"] = b"Lme/nillerusr/UnderhellSarekActivity;Lme/nillerusr/UnderhellVulkanSettingsActivity;Lorg/libsdl/app/SDLActivity;"
@@ -288,6 +291,14 @@ class ApkIdentityTests(unittest.TestCase):
             self.pack({k: v for k, v in libraries.items() if k != missing})
             with self.assertRaises(ValueError):
                 apk_check.verify(self.apk, self.badging)
+        for module in apk_check.DX6_MODULES:
+            entry = "lib/arm64-v8a/lib" + module + ".so"
+            for bad in (None, elf_fixture(b"unrelated DX9 module"), elf_fixture(apk_check.DX6_MODULES[module], machine=40)):
+                broken = dict(libraries)
+                if bad is None: del broken[entry]
+                else: broken[entry] = bad
+                self.pack(broken)
+                with self.assertRaises(ValueError): apk_check.verify(self.apk, self.badging)
         broken = dict(libraries)
         broken["lib/arm64-v8a/libSDL2.so"] = elf_fixture(b"wrong SDL build")
         self.pack(broken)

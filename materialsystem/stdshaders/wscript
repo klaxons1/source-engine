@@ -157,6 +157,17 @@ def build(bld):
 
 	install_path = bld.env.LIBDIR
 
+	if bld.env.SAREK_SDK:
+		from scripts.underhell_dx6 import shader_sources
+		legacy = bld.env.derive()
+		legacy.DEFINES = [d for d in legacy.DEFINES if d.split('=', 1)[0] != 'STDSHADER_DX9_DLL_EXPORT']
+		legacy.append_unique('DEFINES', ['UNDERHELL_SAREK_DX6=1', 'STDSHADER_DX6_DLL_EXPORT=1'])
+		bld.shlib(source=shader_sources(bld.path.abspath()) + ['sarek_dx6_identity.cpp', '../../public/tier0/memoverride.cpp'],
+			target='stdshader_dx6_sarek', name='stdshader_dx6_sarek', env=legacy,
+			features='c cxx', includes=includes, defines=defines, use=libs,
+			linkflags=['-Wl,-Bsymbolic', '-Wl,--no-undefined'], install_path=install_path,
+			idx=bld.get_taskgen_count())
+
 	bld.shlib(
 		source   = source,
 		target   = PROJECT_NAME,

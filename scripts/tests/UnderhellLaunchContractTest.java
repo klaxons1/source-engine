@@ -41,6 +41,12 @@ public class UnderhellLaunchContractTest {
         }
         // The companion/GLES launch path remains independent of native defaults.
         if(String.join(" ",UnderhellLaunchContract.buildArgumentArray("-console")).contains("-w "))throw new AssertionError();
+        String legacy=String.join(" ",UnderhellLaunchContract.buildNativeArgumentArray(
+            "-dxlevel 95 -maxdxlevel 95 +mat_dxlevel 95 -uh_dx6=1 +echo \"keep quoted value\"",2309,1080,720,true));
+        if(!legacy.endsWith("-uh_dx6 -dxlevel 60 -maxdxlevel 60") || legacy.contains("95") || !legacy.contains("keep quoted value"))throw new AssertionError(legacy);
+        String normal=String.join(" ",UnderhellLaunchContract.buildNativeArgumentArray("-uh_dx6 -uh_dx6=1",2309,1080,720,false));
+        if(normal.contains("uh_dx6") || normal.contains("-dxlevel 60"))throw new AssertionError(normal);
+        if(UnderhellLaunchContract.buildArguments("-uh_dx6 -uh_dx6=1 -console").contains("uh_dx6"))throw new AssertionError("GLES leaked legacy selection");
         File root=Files.createTempDirectory("underhell-java").toFile();
         File c=new File(root,"libclient.so"),s=new File(root,"libserver.so"),r=new File(root,"libshaderapidx9.so");
         try {

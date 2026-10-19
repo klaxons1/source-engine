@@ -122,3 +122,7 @@ HRESULT WINAPI D3DXCreateMatrixStack(DWORD,LPD3DXMATRIXSTACK* out) {
 }
 
 extern "C" __attribute__((used, visibility("default"))) const char UnderhellSarekShaderAPI[] = "UNDERHELL_SAREK_SHADERAPI_V1";
+
+#ifdef UNDERHELL_SAREK_DX6
+extern "C" __attribute__((used, visibility("default"))) const char UnderhellDX6ShaderAPI[] = "UNDERHELL_DX6_SHADERAPI_V1";
+#endif

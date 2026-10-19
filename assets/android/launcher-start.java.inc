@@ -41,6 +41,7 @@
                 nativeIntent.putExtra("gamepath", mPref.getString("underhell_gamepath", "/storage/emulated/0/srceng"));
                 nativeIntent.putExtra("driver_id", mPref.getString("underhell_driver", ""));
                 nativeIntent.putExtra("render_height", mPref.getInt("underhell_render_height", 720));
+                nativeIntent.putExtra("dx6", mPref.getBoolean("underhell_sarek_dx6", false));
                 startActivity(nativeIntent);
                 return;
             }

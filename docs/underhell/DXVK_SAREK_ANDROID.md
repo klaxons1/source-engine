@@ -273,3 +273,49 @@ missing/corrupt-font negatives, actual WSI ASan/UBSan host tests including 1000
 identical notifications, replacement/generation/resize/pause, and Vulkan status
 policy. These are not GPU or phone input tests. The APK audit requires the pinned
 font assets as well as the native runtime provenance.
+
+### Opt-in Source DX6 graphics (Sarek, not D7VK)
+
+The user confirmed fonts/resolution/input now work, then selected **Source DX6
+through Sarek**, rather than an actual old-D3D API/D7VK port. D7VK translates
+D3D3/5/6/7 clients into D3D9; Source's `dxlevel 60` still uses its D3D9 shaderapi.
+No D7VK/Wine DLL is bundled or claimed here.
+
+The GPU settings include **DX6-графика через Sarek (экспериментально)**, off by
+default, disabled when GLES is selected. It applies on a fresh GPU-process start.
+The checkbox passes an explicit intent boolean, removes stale private switches
+and conflicting DX-level overrides, and supplies `-dxlevel 60 -maxdxlevel 60`.
+
+This is not just a command-line preset: three separately named libraries are
+built and checked in the APK:
+
+* `materialsystem_sarek_dx6`: a Source-ABI material system with its minimum
+  compiled as 60, rather than the companion's POSIX minimum 90. It loads the
+  private DX6 dictionary explicitly and cannot let companion DX8/9/mod shader
+  DLLs overwrite it. Includes the original fixed-function Wireframe fallback.
+* `shaderapidx9_sarek_dx6`: the real native Sarek shaderapi with a minimum and
+  maximum level of 60. Normal Sarek keeps its existing target/caps behavior.
+* `stdshader_dx6_sarek`: all **32 shader source units** listed in the original
+  `stdshader_dx6.vpc`, including lightmapped/vertex-lit/unlit, eyes/teeth, water,
+  sprites, depth/shadows and old screen-space paths. Legacy files that use the
+  `BEGIN_VS_SHADER` spelling derive directly from `CBaseShader` in this build:
+  their fixed-function helpers are already there; no modern VS/PS binaries or
+  `BaseVSShader.cpp` are needed. Unused old DirectX utility includes are excluded.
+
+The owned launcher chooses both the material system and shaderapi explicitly.
+Unchecking the option selects the **original companion material system and
+ordinary Sarek shaderapi**, not the legacy modules with a higher console value.
+The regular POSIX minimum remains 90, Windows 80, and GLES/ASTC are unchanged.
+Fonts, resolution, ZIP drivers and all touch controls remain shared/preserved.
+
+Expect simpler materials and unavailable modern shader/HDR/postprocessing
+features. Software vertex lighting/skinning and multipass fixed-function
+rendering can be **slower**, so this is not an FPS guarantee. Visual correctness
+and Underhell-specific effects need device validation.
+
+`test-underhell-dx6.py` compiles all 32 actual shader translation units and the
+actual minimum-level preprocessor policy for legacy, normal POSIX and Windows.
+Launcher Java tests exercise checkbox-on/off, quote preservation and conflicting
+DX-level sanitization. APK checks reject missing, wrong-ABI or wrong-identity
+legacy modules and compare them with the staged outputs. These are build/CPU
+checks, not a claim of Android GPU validation.

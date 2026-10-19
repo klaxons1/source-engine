@@ -63,6 +63,8 @@ public final class UnderhellLaunchContract {
                 }
                 continue;
             }
+            // Private legacy selection also belongs to its owned checkbox.
+            if (value.equals("-uh_dx6") || value.startsWith("-uh_dx6=")) continue;
             // This switch belongs to the checkbox, never to a stale saved argv.
             if (value.equals("-uh_astc") || value.startsWith("-uh_astc=")) continue;
             if (value.startsWith("-game=") || value.startsWith("-defaultgamedir=")) continue;
@@ -127,6 +129,10 @@ public final class UnderhellLaunchContract {
     }
 
     public static String[] buildNativeArgumentArray(String input, int surfaceWidth, int surfaceHeight, int targetHeight) {
+        return buildNativeArgumentArray(input, surfaceWidth, surfaceHeight, targetHeight, false);
+    }
+
+    public static String[] buildNativeArgumentArray(String input, int surfaceWidth, int surfaceHeight, int targetHeight, boolean dx6) {
         int[] size = nativeRenderSize(input, surfaceWidth, surfaceHeight, targetHeight);
         // Replace only dimension switches in this owned argv. Preserve quotes,
         // all other options and the GLES path. Avoid first-vs-last duplicate rules.
@@ -135,10 +141,21 @@ public final class UnderhellLaunchContract {
         for (int i = 0; i < args.size(); ++i) {
             String name = args.get(i).value.toLowerCase(Locale.ROOT);
             if (name.equals("-w") || name.equals("-width") || name.equals("-h") || name.equals("-height")) { ++i; continue; }
+            if (dx6 && (name.equals("-dxlevel") || name.equals("-maxdxlevel") || name.equals("+mat_dxlevel"))) {
+                if (i + 1 < args.size() && !args.get(i + 1).value.startsWith("-") && !args.get(i + 1).value.startsWith("+")) ++i;
+                continue;
+            }
+            if (dx6 && (name.startsWith("-dxlevel=") || name.startsWith("-maxdxlevel=") || name.startsWith("+mat_dxlevel="))) continue;
             normalized.append(' ').append(args.get(i).raw);
         }
         normalized.append(" -w ").append(size[0]).append(" -h ").append(size[1]);
-        return buildArgumentArray(normalized.toString());
+        String[] result = buildArgumentArray(normalized.toString());
+        if (!dx6) return result;
+        // Append after public argument sanitization, which rejects a stale -uh_dx6.
+        ArrayList<String> legacy = new ArrayList<String>();
+        java.util.Collections.addAll(legacy, result);
+        java.util.Collections.addAll(legacy, "-uh_dx6", "-dxlevel", "60", "-maxdxlevel", "60");
+        return legacy.toArray(new String[legacy.size()]);
     }
 
     public static void requireLibraries(String directory) throws IOException {

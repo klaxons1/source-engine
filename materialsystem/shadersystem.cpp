@@ -313,6 +313,13 @@ void CShaderSystem::LoadAllShaderDLLs( )
 	// Add the shaders to the dictionary of shaders...
 	SetupShaderDictionary( i );
 
+	#ifdef UNDERHELL_SAREK_DX6
+	// No companion DX8/9 shader DLL may override the fixed-function dictionary.
+	if (!LoadShaderDLL("stdshader_dx6_sarek" DLL_EXT_STRING))
+		Error("Underhell DX6: cannot load the bundled fixed-function shaders\n");
+	return;
+	#endif
+
 	// 360 has the the debug shaders in its dx9 dll
 	if ( IsPC() || !IsX360() )
 	{
@@ -376,6 +383,10 @@ const char *COM_GetModDirectory()
 
 void CShaderSystem::LoadModShaderDLLs( int dxSupportLevel )
 {
+#ifdef UNDERHELL_SAREK_DX6
+	// The native legacy profile intentionally has no programmable mod-shader ABI.
+	return;
+#endif
 	if ( IsX360() )
 		return;
 

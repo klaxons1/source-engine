@@ -9,6 +9,7 @@ import re
 import subprocess
 import sys
 import zipfile
+from underhell_dx6 import MODULES as DX6_MODULES
 
 PACKAGE = "com.valvesoftware.source.underhell"
 MARKERS = {"client": b"UNDERHELL_PORT_CLIENT_V1", "server": b"UNDERHELL_PORT_SERVER_V1",
@@ -55,7 +56,7 @@ def verify(apk, badging, staging=None):
             required_runtime = {"lib" + n + ".so" for n in ("SDL2", "hidapi", "dxvk_sarek_d3d9", "adrenotools", "hook_impl", "main_hook", "file_redirect_hook", "gsl_alloc_hook")}
             if set(hashes) != required_runtime:
                 raise ValueError("Incomplete Vulkan runtime manifest")
-            for module in sorted(required_runtime | {"libshaderapidx9_sarek.so", "liblauncher_sarek.so"}):
+            for module in sorted(required_runtime | {"libshaderapidx9_sarek.so", "liblauncher_sarek.so"} | {"lib" + n + ".so" for n in DX6_MODULES}):
                 name = "lib/arm64-v8a/" + module
                 if name not in members:
                     raise ValueError("Incomplete Vulkan APK: missing " + name)
@@ -68,6 +69,7 @@ def verify(apk, badging, staging=None):
                 if staging is not None and (not (staging / name).is_file() or hashlib.sha256((staging / name).read_bytes()).hexdigest() != digest):
                     raise ValueError("Vulkan library differs from staged build: " + name)
                 marker = {"libshaderapidx9_sarek.so": b"UNDERHELL_SAREK_SHADERAPI_V1", "liblauncher_sarek.so": b"UNDERHELL_SAREK_LAUNCHER_V1"}.get(module)
+                marker = DX6_MODULES.get(module[3:-3], marker)
                 if marker and marker not in data:
                     raise ValueError("Wrong native Vulkan engine module: " + name)
                 report["libraries"][name] = digest

@@ -9,6 +9,7 @@ git submodule update --init --recursive
 # Exercise the actual pinned SDL Android default-selection block: omitting the
 # GL flag alone would silently create an EGL window and break native Vulkan.
 python3 scripts/test-underhell-sdl-window.py
+python3 scripts/test-underhell-dx6.py
 # Separate modern-toolchain runtime: static C++ and C/COM boundaries only.
 # Keep the established r10e/GNUSTL toolchain for the Source/game modules.
 python3 -m pip install --quiet --target .cache/underhell-port/vulkan-build-python cmake==3.31.6 ninja==1.11.1.4 meson==1.8.0
@@ -21,7 +22,7 @@ python3 scripts/run-android-waf.py --config-log build/config.log ./waf configure
 # Fail fast on the new renderer before compiling the unchanged game modules.
 python3 scripts/run-android-waf.py ./waf install --target=shaderapidx9 --strip
 python3 scripts/verify-underhell-renderer.py srceng-mod-launcher/android/lib/arm64-v8a/libshaderapidx9.so
-python3 scripts/run-android-waf.py ./waf install --target=shaderapidx9_sarek,launcher_sarek --strip
+python3 scripts/run-android-waf.py ./waf install --target=shaderapidx9_sarek,launcher_sarek,shaderapidx9_sarek_dx6,materialsystem_sarek_dx6,stdshader_dx6_sarek --strip
 python3 scripts/run-android-waf.py ./waf install --target=client,server --strip
 
 if [ -e "srceng-mod-launcher/android/lib/arm64-v8a/README.md" ]; then

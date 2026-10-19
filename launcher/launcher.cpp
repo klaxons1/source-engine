@@ -665,11 +665,17 @@ bool CSourceAppSystemGroup::Create()
 
 	double st = Plat_FloatTime();
 
+	const char *materialSystemModule = "materialsystem" DLL_EXT_STRING;
+#ifdef UNDERHELL_VULKAN_LAUNCHER
+	if (CommandLine()->FindParm("-uh_dx6"))
+		materialSystemModule = "materialsystem_sarek_dx6" DLL_EXT_STRING;
+#endif
+
 	AppSystemInfo_t appSystems[] = 
 	{
 		{ "engine" DLL_EXT_STRING,			CVAR_QUERY_INTERFACE_VERSION },	// NOTE: This one must be first!!
 		{ "inputsystem" DLL_EXT_STRING,		INPUTSYSTEM_INTERFACE_VERSION },
-		{ "materialsystem" DLL_EXT_STRING,	MATERIAL_SYSTEM_INTERFACE_VERSION },
+		{ materialSystemModule,	MATERIAL_SYSTEM_INTERFACE_VERSION },
 		{ "datacache" DLL_EXT_STRING,		DATACACHE_INTERFACE_VERSION },
 		{ "datacache" DLL_EXT_STRING,		MDLCACHE_INTERFACE_VERSION },
 		{ "datacache" DLL_EXT_STRING,		STUDIO_DATA_CACHE_INTERFACE_VERSION },
@@ -752,7 +758,8 @@ bool CSourceAppSystemGroup::Create()
 	// Load up the appropriate shader DLL
 	// This has to be done before connection.
 	#ifdef UNDERHELL_VULKAN_LAUNCHER
-	char const* pDLLName = "shaderapidx9_sarek" DLL_EXT_STRING;
+	char const* pDLLName = CommandLine()->FindParm("-uh_dx6")
+		? "shaderapidx9_sarek_dx6" DLL_EXT_STRING : "shaderapidx9_sarek" DLL_EXT_STRING;
 #else
 	char const* pDLLName = "shaderapidx9" DLL_EXT_STRING;
 #endif

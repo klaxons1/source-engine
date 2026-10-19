@@ -32,7 +32,7 @@ public final class UnderhellSarekActivity extends SDLActivity {
         int[] surface = nativeGetSurfaceSize();
         int height = getIntent().getIntExtra("render_height", 720);
         String[] result = UnderhellLaunchContract.buildNativeArgumentArray(
-            getIntent().getStringExtra("argv"), surface[0], surface[1], height);
+            getIntent().getStringExtra("argv"), surface[0], surface[1], height, getIntent().getBooleanExtra("dx6", false));
         android.util.Log.i("UnderhellVulkan", "Surface=" + surface[0] + "x" + surface[1]
             + "; target height=" + height + "; argv=" + Arrays.toString(result));
         return result;
@@ -46,6 +46,10 @@ public final class UnderhellSarekActivity extends SDLActivity {
                 throw new IOException("Missing exact lowercase underhell/gameinfo.txt in the configured game path");
             String own = getApplicationInfo().nativeLibraryDir;
             UnderhellLaunchContract.requireLibraries(own); // preserve client/server/GLES provenance checks
+            if (getIntent().getBooleanExtra("dx6", false))
+                for (String module : new String[] {"shaderapidx9_sarek_dx6", "materialsystem_sarek_dx6", "stdshader_dx6_sarek"})
+                    if (!new File(own, "lib" + module + ".so").isFile())
+                        throw new IOException("Incomplete DX6 APK: " + module);
             String core = getPackageManager().getApplicationInfo("com.valvesoftware.source", 0).nativeLibraryDir;
             UnderhellGpuDrivers.Driver driver = UnderhellGpuDrivers.selected(this, getIntent().getStringExtra("driver_id"));
             if (driver != null && Build.VERSION.SDK_INT < 28) throw new IOException("Custom drivers need Android 9+");
